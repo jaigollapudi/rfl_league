@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Calendar } from "lucide-react";
+import { Plus, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { supabase } from "@/lib/supabase";
@@ -21,6 +21,20 @@ type ActivityRow = {
 };
 
 const todayStr = () => new Date().toISOString().split("T")[0];
+
+function startOfWeekMonday(d: Date): Date {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = date.getUTCDay();
+  const diff = (day + 6) % 7; // Monday = 0
+  date.setUTCDate(date.getUTCDate() - diff);
+  return date;
+}
+
+function formatDateYYYYMMDD(d: Date): string {
+  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+    .toISOString()
+    .split("T")[0];
+}
 
 type ActivityConfig = {
   name: string;
@@ -107,6 +121,7 @@ export default function DashboardPage() {
   const [teamPoints, setTeamPoints] = useState<number | null>(null);
   const [teamAvgRR, setTeamAvgRR] = useState<number | null>(null);
   const [teamPosition, setTeamPosition] = useState<number | null>(null);
+  const [viewWeekStart, setViewWeekStart] = useState<Date>(() => startOfWeekMonday(new Date()));
 
   const currentConfig = ACTIVITY_CONFIGS[activity];
 
@@ -146,17 +161,44 @@ export default function DashboardPage() {
     return { valid: true, error: "" };
   }, [userId, activity, duration, distance, steps, holes]);
 
-  async function fetchActivity() {
+  async function fetchActivity(weekStart?: Date) {
     if (!userId) return;
-    const { data, error } = await supabase.rpc("rfl_activity_last_n_days", {
-      p_user_id: userId,
-      p_days: 7,
-    });
-    if (!error) setRows(data as ActivityRow[]);
+    const ws = startOfWeekMonday(weekStart || viewWeekStart);
+    const we = new Date(ws);
+    we.setUTCDate(ws.getUTCDate() + 6);
+    const { data, error } = await supabase
+      .from('entries')
+      .select('date,type,workout_type,duration,distance,steps,holes,status,rr_value')
+      .eq('user_id', userId)
+      .gte('date', formatDateYYYYMMDD(ws))
+      .lte('date', formatDateYYYYMMDD(we))
+      .order('date', { ascending: true });
+    if (error) return;
+    const entries = (data || []) as Array<Omit<ActivityRow,'points'>>;
+    const filled: ActivityRow[] = [];
+    for (let i = 0; i < 7; i++) {
+      const day = new Date(ws);
+      day.setUTCDate(ws.getUTCDate() + i);
+      const ds = formatDateYYYYMMDD(day);
+      const e = entries.find(x => String(x.date) === ds);
+      filled.push({
+        date: ds,
+        type: e?.type ?? null,
+        workout_type: e?.workout_type ?? null,
+        duration: e?.duration ?? null,
+        distance: e?.distance ?? null,
+        steps: e?.steps ?? null,
+        holes: e?.holes ?? null,
+        status: (e?.status as ActivityRow['status']) ?? null,
+        rr_value: e?.rr_value ?? null,
+        points: null,
+      });
+    }
+    setRows(filled);
   }
 
   useEffect(() => {
-    fetchActivity();
+    fetchActivity(viewWeekStart);
     (async () => {
       if (!userId) return;
       // Fetch user's team id and name
@@ -220,7 +262,7 @@ export default function DashboardPage() {
       if (pos !== null) setTeamPosition(pos);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, viewWeekStart]);
 
   useEffect(() => {
     setDuration(currentConfig.minDuration || "");
@@ -266,7 +308,7 @@ export default function DashboardPage() {
       });
       setOpenWorkout(false);
       setValidationError("");
-      await fetchActivity();
+      await fetchActivity(viewWeekStart);
     } finally {
       setLoading(false);
     }
@@ -281,12 +323,26 @@ export default function DashboardPage() {
     try {
       await supabase.rpc('rfl_upsert_rest_day', { p_user_id: userId, p_date: date, p_team_id: null, p_status: 'approved' });
       setOpenRest(false);
-      await fetchActivity();
+      await fetchActivity(viewWeekStart);
       const { count } = await supabase.from('entries').select('id', { count: 'exact', head: true })
         .eq('user_id', userId).eq('type','rest').eq('status','approved');
       setRestUsed(count || 0);
     } finally { setLoading(false); }
   }
+
+  // League bounds (Sept 1 to Dec 1 of current year) for navigation
+  const currentYear = new Date().getFullYear();
+  const seasonStart = startOfWeekMonday(new Date(Date.UTC(currentYear, 8, 1))); // Sept
+  const seasonEnd = startOfWeekMonday(new Date(Date.UTC(currentYear, 11, 1))); // Dec
+  const canGoPrev = startOfWeekMonday(new Date(viewWeekStart)) > seasonStart;
+  const canGoNext = startOfWeekMonday(new Date(viewWeekStart)) < seasonEnd;
+  const weekNumber = Math.max(
+    1,
+    Math.floor(
+      (startOfWeekMonday(new Date(viewWeekStart)).getTime() - seasonStart.getTime()) /
+        (7 * 24 * 3600 * 1000)
+    ) + 1
+  );
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
@@ -358,7 +414,26 @@ export default function DashboardPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Calendar className="w-5 h-5 text-rfl-light-blue" /> This Week</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2"><Calendar className="w-5 h-5 text-rfl-light-blue" /> This Week</CardTitle>
+              <div className="flex items-center gap-2">
+                <button
+                  className={`p-1 rounded border ${canGoPrev ? 'hover:bg-gray-50' : 'opacity-50 cursor-not-allowed'}`}
+                  onClick={() => canGoPrev && setViewWeekStart(prev => { const d = new Date(prev); d.setUTCDate(d.getUTCDate() - 7); return startOfWeekMonday(d); })}
+                  aria-label="Previous week"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <div className="px-3 py-1 rounded bg-gray-100 text-sm font-medium text-gray-800">Week {weekNumber}</div>
+                <button
+                  className={`p-1 rounded border ${canGoNext ? 'hover:bg-gray-50' : 'opacity-50 cursor-not-allowed'}`}
+                  onClick={() => canGoNext && setViewWeekStart(prev => { const d = new Date(prev); d.setUTCDate(d.getUTCDate() + 7); return startOfWeekMonday(d); })}
+                  aria-label="Next week"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
