@@ -22,6 +22,70 @@ type ActivityRow = {
 
 const todayStr = () => new Date().toISOString().split("T")[0];
 
+type ActivityConfig = {
+  name: string;
+  fields: Array<'duration' | 'distance' | 'steps' | 'holes'>;
+  rules: string[];
+  minDuration?: number;
+  minDistance?: number;
+  minSteps?: number;
+  minHoles?: number;
+};
+
+const ACTIVITY_CONFIGS: Record<string, ActivityConfig> = {
+  run: {
+    name: "Brisk Walk/Jog/Run",
+    fields: ['duration', 'distance'],
+    rules: ["4 kms OR 45 mins minimum"],
+    minDistance: 4,
+    minDuration: 45,
+  },
+  gym: {
+    name: "Weightlifting / Gym Workout",
+    fields: ['duration'],
+    rules: ["45 mins minimum"],
+    minDuration: 45,
+  },
+  yoga: {
+    name: "Yoga/Pilates/Zumba",
+    fields: ['duration'],
+    rules: ["45 mins minimum"],
+    minDuration: 45,
+  },
+  cycling: {
+    name: "Cycling",
+    fields: ['duration', 'distance'],
+    rules: ["10 kms OR 45 mins minimum"],
+    minDistance: 10,
+    minDuration: 45,
+  },
+  swimming: {
+    name: "Swimming",
+    fields: ['duration'],
+    rules: ["45 mins minimum"],
+    minDuration: 45,
+  },
+  racket: {
+    name: "Racket Sports",
+    fields: ['duration'],
+    rules: ["45 mins minimum"],
+    minDuration: 45,
+  },
+  steps: {
+    name: "Steps",
+    fields: ['steps'],
+    rules: ["10,000 steps minimum"],
+    minSteps: 10000,
+  },
+  golf: {
+    name: "Golf",
+    fields: ['holes', 'steps'],
+    rules: ["9 holes (8000+ steps)"],
+    minHoles: 9,
+    minSteps: 8000,
+  },
+};
+
 export default function DashboardPage() {
   const { data: session } = useSession();
   const userId = session?.user?.id;
@@ -37,13 +101,45 @@ export default function DashboardPage() {
   const [rows, setRows] = useState<ActivityRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [restUsed, setRestUsed] = useState<number>(0);
+  const [validationError, setValidationError] = useState<string>("");
 
-  const canSubmitWorkout = useMemo(() => {
-    if (!userId) return false;
-    if (activity === "steps") return !!steps && Number(steps) > 0;
-    if (activity === "golf") return !!holes && Number(holes) > 0;
-    return !!duration && Number(duration) > 0;
-  }, [userId, activity, duration, steps, holes]);
+  const currentConfig = ACTIVITY_CONFIGS[activity];
+
+  const validateWorkout = useMemo(() => {
+    if (!userId) return { valid: false, error: "" };
+    const config = ACTIVITY_CONFIGS[activity];
+
+    if (activity === "steps") {
+      if (!steps || Number(steps) < (config.minSteps || 0)) {
+        return { valid: false, error: `Minimum ${config.minSteps?.toLocaleString()} steps required` };
+      }
+      return { valid: true, error: "" };
+    }
+
+    if (activity === "golf") {
+      const holesValid = holes && Number(holes) >= (config.minHoles || 0);
+      const stepsValid = steps && Number(steps) >= (config.minSteps || 0);
+      if (!holesValid && !stepsValid) {
+        return { valid: false, error: `Minimum ${config.minHoles} holes OR ${config.minSteps?.toLocaleString()} steps required` };
+      }
+      return { valid: true, error: "" };
+    }
+
+    const durationValid = duration && Number(duration) >= (config.minDuration || 0);
+    const distanceValid = distance && Number(distance) >= (config.minDistance || 0);
+
+    if (config.fields.includes('distance') && config.minDistance) {
+      if (!durationValid && !distanceValid) {
+        return { valid: false, error: `Minimum ${config.minDuration} mins OR ${config.minDistance} kms required` };
+      }
+    } else {
+      if (!durationValid) {
+        return { valid: false, error: `Minimum ${config.minDuration} mins required` };
+      }
+    }
+
+    return { valid: true, error: "" };
+  }, [userId, activity, duration, distance, steps, holes]);
 
   async function fetchActivity() {
     if (!userId) return;
@@ -69,8 +165,20 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
+  useEffect(() => {
+    setDuration(currentConfig.minDuration || "");
+    setDistance("");
+    setSteps("");
+    setHoles("");
+    setValidationError("");
+  }, [activity, currentConfig.minDuration]);
+
   async function onSaveWorkout() {
-    if (!userId || !canSubmitWorkout) return;
+    if (!userId) return;
+    if (!validateWorkout.valid) {
+      setValidationError(validateWorkout.error);
+      return;
+    }
     if (date > todayStr()) {
       alert("Future dates are not allowed.");
       return;
@@ -100,6 +208,7 @@ export default function DashboardPage() {
         p_status: "approved",
       });
       setOpenWorkout(false);
+      setValidationError("");
       await fetchActivity();
     } finally {
       setLoading(false);
@@ -131,16 +240,37 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Plus className="w-5 h-5 text-rfl-coral" /> Add Workout</CardTitle>
+            <CardTitle className="flex items-center gap-2"><Plus className="w-5 h-5 text-rfl-coral" /> Add Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center gap-3">
-              <Button className="bg-rfl-coral" onClick={() => { setDate(todayStr()); setOpenWorkout(true); }}>Log Workout</Button>
-              <Button variant="outline" onClick={() => { setDate(todayStr()); setOpenRest(true); }}>Log Rest Day</Button>
-            </div>
-            <div className="mt-4 text-sm text-gray-600">
-              <div>Points this week: <span className="font-semibold text-rfl-coral">{rows.reduce((a,r)=>a+(r.points||0),0)}</span></div>
-              <div>Avg RR this week: <span className="font-semibold text-rfl-navy">{(() => { const rr = rows.map(r=>r.rr_value||0).filter(v=>v>0); return rr.length ? (Math.round((rr.reduce((a,b)=>a+b,0)/rr.length)*100)/100) : 0; })()}</span></div>
+            <div className="grid grid-cols-2 divide-x divide-gray-200">
+              <div className="pr-4 flex flex-col items-center">
+                <Button className="bg-rfl-coral hover:bg-rfl-coral/90 mb-4" onClick={() => { setDate(todayStr()); setOpenWorkout(true); }}>Log Workout</Button>
+                <div className="text-xs text-gray-600 space-y-1.5 w-full">
+                  <div className="font-semibold text-rfl-navy mb-2">Approved Workouts:</div>
+                  <div>• Walk/Jog/Run: 4 km OR 45 min</div>
+                  <div>• Gym: 45 min</div>
+                  <div>• Yoga/Pilates/Zumba: 45 min</div>
+                  <div>• Cycling: 10 km OR 45 min</div>
+                  <div>• Swimming: 45 min</div>
+                  <div>• Steps: 10,000 steps</div>
+                  <div>• Golf: 9 holes (8000+ steps)</div>
+                </div>
+              </div>
+              <div className="pl-4 flex flex-col items-center justify-start">
+                <Button variant="outline" className="border-rfl-navy text-rfl-navy hover:bg-rfl-navy/10 mb-4" onClick={() => { setDate(todayStr()); setOpenRest(true); }}>Log Rest Day</Button>
+                <div className="text-center space-y-3 w-full">
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <div className="text-sm text-gray-600">Rest Days Remaining</div>
+                    <div className="text-2xl font-bold text-rfl-navy">{Math.max(0, 18 - restUsed)} / 18</div>
+                  </div>
+                  <div className="text-xs text-gray-600 space-y-1">
+                    <div className="font-semibold text-rfl-navy">This Week:</div>
+                    <div>Points: <span className="font-semibold text-rfl-coral">{rows.reduce((a,r)=>a+(r.points||0),0)}</span></div>
+                    <div>Avg RR: <span className="font-semibold text-rfl-navy">{(() => { const rr = rows.map(r=>r.rr_value||0).filter(v=>v>0); return rr.length ? (Math.round((rr.reduce((a,b)=>a+b,0)/rr.length)*100)/100) : 0; })()}</span></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -179,15 +309,18 @@ export default function DashboardPage() {
           <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-rfl-navy">Add Workout</h2>
-              <button onClick={() => setOpenWorkout(false)} className="text-gray-500">✕</button>
+              <button onClick={() => { setOpenWorkout(false); setValidationError(""); }} className="text-gray-500">✕</button>
             </div>
+            {validationError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">{validationError}</div>
+            )}
             <div className="space-y-3">
               <label className="block text-sm font-medium text-gray-700">Date</label>
               <input value={date} onChange={(e)=>setDate(e.target.value)} type="date" max={todayStr()} className="w-full border rounded-md px-3 py-2" />
               <label className="block text-sm font-medium text-gray-700">Activity</label>
               <select value={activity} onChange={(e)=>setActivity(e.target.value)} className="w-full border rounded-md px-3 py-2">
-                <option value="run">Run/Walk/Jog</option>
-                <option value="gym">Gym</option>
+                <option value="run">Brisk Walk/Jog/Run</option>
+                <option value="gym">Weightlifting / Gym Workout</option>
                 <option value="yoga">Yoga/Pilates/Zumba</option>
                 <option value="cycling">Cycling</option>
                 <option value="swimming">Swimming</option>
@@ -196,28 +329,41 @@ export default function DashboardPage() {
                 <option value="golf">Golf</option>
               </select>
 
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-gray-700">
+                <div className="font-medium text-rfl-navy mb-1">Requirements:</div>
+                {currentConfig.rules.map((rule, idx) => (<div key={idx}>• {rule}</div>))}
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Duration (mins)</label>
-                  <input value={duration ?? ''} onChange={(e)=>setDuration(e.target.value === '' ? '' : Number(e.target.value))} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Distance (km)</label>
-                  <input value={distance ?? ''} onChange={(e)=>setDistance(e.target.value === '' ? '' : Number(e.target.value))} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Steps</label>
-                  <input value={steps ?? ''} onChange={(e)=>setSteps(e.target.value === '' ? '' : Number(e.target.value))} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Holes (golf)</label>
-                  <input value={holes ?? ''} onChange={(e)=>setHoles(e.target.value === '' ? '' : Number(e.target.value))} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
-                </div>
+                {currentConfig.fields.includes('duration') && (
+                  <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
+                    <label className="block text-sm font-medium text-gray-700">Duration (mins){currentConfig.minDuration ? ` — min ${currentConfig.minDuration}` : ''}</label>
+                    <input value={duration ?? ''} onChange={(e)=>{ setDuration(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
+                  </div>
+                )}
+                {currentConfig.fields.includes('distance') && (
+                  <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
+                    <label className="block text-sm font-medium text-gray-700">Distance (km){currentConfig.minDistance ? ` — min ${currentConfig.minDistance}` : ''}</label>
+                    <input value={distance ?? ''} onChange={(e)=>{ setDistance(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} step="0.1" className="w-full border rounded-md px-3 py-2" />
+                  </div>
+                )}
+                {currentConfig.fields.includes('steps') && (
+                  <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
+                    <label className="block text-sm font-medium text-gray-700">Steps{currentConfig.minSteps ? ` — min ${currentConfig.minSteps.toLocaleString()}` : ''}</label>
+                    <input value={steps ?? ''} onChange={(e)=>{ setSteps(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
+                  </div>
+                )}
+                {currentConfig.fields.includes('holes') && (
+                  <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
+                    <label className="block text-sm font-medium text-gray-700">Holes (golf){currentConfig.minHoles ? ` — min ${currentConfig.minHoles}` : ''}</label>
+                    <input value={holes ?? ''} onChange={(e)=>{ setHoles(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
+                  </div>
+                )}
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setOpenWorkout(false)}>Cancel</Button>
-              <Button disabled={!canSubmitWorkout || loading} className="bg-rfl-navy" onClick={onSaveWorkout}>{loading ? 'Saving…' : 'Save'}</Button>
+              <Button variant="outline" onClick={() => { setOpenWorkout(false); setValidationError(""); }}>Cancel</Button>
+              <Button disabled={loading} className="bg-rfl-navy" onClick={onSaveWorkout}>{loading ? 'Saving…' : 'Save'}</Button>
             </div>
           </div>
         </div>
