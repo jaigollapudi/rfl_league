@@ -1,0 +1,74 @@
+import NextAuth from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import { supabase } from "@/lib/supabase";
+
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      name: string;
+      role: "player" | "leader";
+    };
+  }
+}
+
+const authConfig = {
+  session: {
+    strategy: "jwt" as const,
+  },
+  providers: [
+    Credentials({
+      name: "Credentials",
+      credentials: {
+        firstName: { label: "First Name", type: "text" },
+        lastName: { label: "Last Name", type: "password" },
+      },
+      async authorize(credentials) {
+        const firstName = (credentials?.firstName || "").trim();
+        const lastName = (credentials?.lastName || "").trim();
+
+        if (!firstName || !lastName) return null;
+
+        const { data, error } = await supabase
+          .from("accounts")
+          .select("id, first_name, last_name, role")
+          .eq("first_name", firstName)
+          .eq("last_name", lastName)
+          .maybeSingle();
+
+        if (error) return null;
+        if (!data) return null;
+
+        return {
+          id: data.id,
+          name: data.first_name,
+          role: data.role as "player" | "leader",
+        } as { id: string; name: string; role: "player" | "leader" };
+      },
+    }),
+  ],
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = (user as unknown as { id: string }).id;
+        token.name = user.name;
+        token.role = (user as unknown as { role: "player" | "leader" }).role;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      session.user = {
+        id: String(token.id || ""),
+        name: String(token.name || ""),
+        role: (token as { role?: "player" | "leader" }).role || "player",
+      };
+      return session;
+    },
+  },
+};
+
+const { auth, signIn, signOut } = NextAuth(authConfig);
+
+export { auth, signIn, signOut };
+
+
