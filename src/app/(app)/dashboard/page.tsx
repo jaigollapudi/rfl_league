@@ -102,6 +102,11 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [restUsed, setRestUsed] = useState<number>(0);
   const [validationError, setValidationError] = useState<string>("");
+  const [teamId, setTeamId] = useState<string | null>(null);
+  const [teamName, setTeamName] = useState<string>("");
+  const [teamPoints, setTeamPoints] = useState<number | null>(null);
+  const [teamAvgRR, setTeamAvgRR] = useState<number | null>(null);
+  const [teamPosition, setTeamPosition] = useState<number | null>(null);
 
   const currentConfig = ACTIVITY_CONFIGS[activity];
 
@@ -154,6 +159,18 @@ export default function DashboardPage() {
     fetchActivity();
     (async () => {
       if (!userId) return;
+      // Fetch user's team id and name
+      const { data: acct } = await supabase
+        .from('accounts')
+        .select('team_id, teams(name)')
+        .eq('id', userId)
+        .maybeSingle();
+      const tId = (acct as unknown as { team_id?: string } | null)?.team_id || null;
+      const tName = ((acct as unknown as { teams?: { name?: string } } | null)?.teams?.name) || "";
+      setTeamId(tId);
+      setTeamName(tName || "");
+
+      // Fetch rest day count
       const { count } = await supabase
         .from('entries')
         .select('id', { count: 'exact', head: true })
@@ -161,6 +178,46 @@ export default function DashboardPage() {
         .eq('type', 'rest')
         .eq('status', 'approved');
       setRestUsed(count || 0);
+
+      // Fetch leaderboard to compute team summary and position
+      const { data: leaderboard } = await supabase.rpc('rfl_team_leaderboard');
+      const rowsAny = (leaderboard as unknown as Array<Record<string, unknown>>) || [];
+      // Try to derive rank by points desc, rr desc if not present
+      const getNum = (v: unknown): number => (typeof v === 'number' ? v : Number(v) || 0);
+      const findKey = (obj: Record<string, unknown>, keys: string[]): string | null => {
+        for (const k of keys) if (k in obj) return k; return null;
+      };
+      const idKey = rowsAny[0] ? (findKey(rowsAny[0], ['team_id','id','teamid']) || 'team_id') : 'team_id';
+      const nameKey = rowsAny[0] ? (findKey(rowsAny[0], ['team_name','name']) || 'team_name') : 'team_name';
+      const ptsKey = rowsAny[0] ? (findKey(rowsAny[0], ['points','total_points','sum_points']) || 'points') : 'points';
+      const rrKey = rowsAny[0] ? (findKey(rowsAny[0], ['avg_rr','average_rr','rr']) || 'avg_rr') : 'avg_rr';
+
+      const sorted = [...rowsAny].sort((a,b)=>{
+        const dp = getNum(b[ptsKey]) - getNum(a[ptsKey]);
+        if (dp !== 0) return dp;
+        return getNum(b[rrKey]) - getNum(a[rrKey]);
+      });
+      let pos: number | null = null;
+      let pts: number | null = null;
+      let rr: number | null = null;
+      if (tId) {
+        const idx = sorted.findIndex(r => String(r[idKey]) === String(tId));
+        if (idx >= 0) {
+          pos = idx + 1;
+          pts = getNum(sorted[idx][ptsKey]);
+          rr = getNum(sorted[idx][rrKey]);
+        }
+      } else if (tName) {
+        const idx = sorted.findIndex(r => String(r[nameKey]) === String(tName));
+        if (idx >= 0) {
+          pos = idx + 1;
+          pts = getNum(sorted[idx][ptsKey]);
+          rr = getNum(sorted[idx][rrKey]);
+        }
+      }
+      if (pts !== null) setTeamPoints(pts);
+      if (rr !== null) setTeamAvgRR(Math.round((rr as number) * 100) / 100);
+      if (pos !== null) setTeamPosition(pos);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
@@ -268,6 +325,31 @@ export default function DashboardPage() {
                     <div className="font-semibold text-rfl-navy">This Week:</div>
                     <div>Points: <span className="font-semibold text-rfl-coral">{rows.reduce((a,r)=>a+(r.points||0),0)}</span></div>
                     <div>Avg RR: <span className="font-semibold text-rfl-navy">{(() => { const rr = rows.map(r=>r.rr_value||0).filter(v=>v>0); return rr.length ? (Math.round((rr.reduce((a,b)=>a+b,0)/rr.length)*100)/100) : 0; })()}</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* Team Summary full-width beneath the two halves */}
+            <div className="mt-6">
+              <div className="rounded-lg border bg-white p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm font-semibold text-rfl-navy">Team Summary {teamName ? `— ${teamName}` : ''}</div>
+                  {teamPosition ? (
+                    <div className="text-xs px-2 py-0.5 rounded-full bg-rfl-coral text-white">Position #{teamPosition}</div>
+                  ) : null}
+                </div>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div className="p-3 bg-rfl-peach/50 rounded">
+                    <div className="text-xs text-gray-600">Points (week)</div>
+                    <div className="text-lg font-bold text-rfl-coral">{teamPoints ?? '—'}</div>
+                  </div>
+                  <div className="p-3 bg-rfl-peach/50 rounded">
+                    <div className="text-xs text-gray-600">Avg RR</div>
+                    <div className="text-lg font-bold text-rfl-navy">{teamAvgRR ?? '—'}</div>
+                  </div>
+                  <div className="p-3 bg-rfl-peach/50 rounded">
+                    <div className="text-xs text-gray-600">Your week points</div>
+                    <div className="text-lg font-bold text-rfl-navy">{rows.reduce((a,r)=>a+(r.points||0),0)}</div>
                   </div>
                 </div>
               </div>
