@@ -23,7 +23,8 @@ type ActivityRow = {
 const todayStr = () => new Date().toISOString().split("T")[0];
 
 function formatDateYYYYMMDD(d: Date): string {
-  return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  // Use UTC components to avoid timezone shifting across boundaries
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
     .toISOString()
     .split("T")[0];
 }
@@ -33,8 +34,13 @@ function addDaysUTC(d: Date, days: number): Date {
 }
 
 function firstWeekStart(year: number): Date {
-  // Week 1 starts exactly on Sept 1 (Mon–Sun blocks thereafter)
-  return new Date(Date.UTC(year, 8, 1)); // Sept = 8
+  // Week 1 starts at the Monday on/after Sept 1
+  const sept1 = new Date(Date.UTC(year, 8, 1));
+  const day = sept1.getUTCDay(); // 0 Sun .. 6 Sat
+  // Compute days to add to reach Monday (1). If already Monday, add 0.
+  const add = day === 0 ? 1 : (day <= 1 ? (1 - day) : (7 - (day - 1)));
+  const monday = addDaysUTC(sept1, add);
+  return monday;
 }
 
 function seasonEndStart(year: number): Date {
