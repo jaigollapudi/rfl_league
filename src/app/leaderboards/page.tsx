@@ -53,13 +53,34 @@ export default function LeaderboardsPage() {
       const userIds = Array.from(aggMap.keys());
       let usersMeta: Record<string, { name: string; team: string | null }> = {};
       if (userIds.length) {
-        const { data: users } = await supabase
-          .from('accounts')
-          .select('id, first_name, teams(name)')
-          .in('id', userIds);
-        (users || []).forEach((u: any) => {
-          usersMeta[String(u.id)] = { name: u.first_name || '—', team: u.teams?.name || null };
-        });
+        let users: any[] | null = null;
+        try {
+          const res = await supabase
+            .from('accounts')
+            .select('id, first_name, teams(name)')
+            .in('id', userIds);
+          users = res.data as any[] | null;
+        } catch (e) {
+          users = null;
+        }
+        if (!users || users.length === 0) {
+          // Fallback: pull metadata via entries join (RLS-safe in some setups)
+          const { data: joined } = await supabase
+            .from('entries')
+            .select('user_id, accounts!inner(first_name, teams(name))')
+            .eq('status','approved')
+            .in('user_id', userIds);
+          (joined || []).forEach((row: any) => {
+            usersMeta[String(row.user_id)] = {
+              name: row.accounts?.first_name || '—',
+              team: row.accounts?.teams?.name || null,
+            };
+          });
+        } else {
+          (users || []).forEach((u: any) => {
+            usersMeta[String(u.id)] = { name: u.first_name || '—', team: u.teams?.name || null };
+          });
+        }
       }
 
       const playersAll: PlayerRow[] = userIds.map((uid) => {
@@ -129,7 +150,7 @@ export default function LeaderboardsPage() {
               {players.map((p, idx) => (
                 <div key={p.user_id} className="flex items-center justify-between p-3 border rounded">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-rfl-coral text-white flex items-center justify-center font-semibold">{idx+1}</div>
+                    <div className="w-8 h-8 rounded-full bg-rfl-coral text-white flex items-center justify-center font-semibold">{idx+1 + (page-1)*pageSize}</div>
                     <div>
                       <div className="font-medium text-rfl-navy">{p.name}</div>
                       <div className="text-xs text-gray-600">{p.team ?? '—'}</div>
