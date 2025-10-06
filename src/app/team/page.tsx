@@ -28,6 +28,12 @@ type PendingEntry = {
   accounts: { first_name: string };
 };
 
+function formatLocalDateLabel(yyyyMmDd: string): string {
+  const [y, m, d] = yyyyMmDd.split('-').map(v => parseInt(v, 10));
+  const dt = new Date(y, (m || 1) - 1, d || 1);
+  return dt.toDateString();
+}
+
 export default function TeamPage() {
   const { data: session } = useSession();
   const userId = session?.user?.id;
@@ -49,19 +55,12 @@ export default function TeamPage() {
     (async () => {
       const { data } = await supabase.rpc('rfl_team_week_summary', { p_team_id: teamId });
       setMembers((data as MemberRow[]) || []);
-      // pending for current week
-      const start = new Date();
-      const day = (start.getDay() + 6) % 7; // 0=Mon
-      start.setDate(start.getDate() - day);
-      const weekStart = start.toISOString().split('T')[0];
-      const today = new Date().toISOString().split('T')[0];
+      // Fetch ALL pending entries for the team (not just this week)
       const { data: pend } = await supabase
         .from('entries')
         .select('id,user_id,date,type,workout_type,duration,distance,steps,holes,rr_value,status,proof_url,accounts!inner(first_name)')
         .eq('team_id', teamId)
         .eq('status','pending')
-        .gte('date', weekStart)
-        .lte('date', today)
         .order('date', { ascending: false });
       setPending((pend as PendingEntry[]) || []);
     })();
@@ -132,14 +131,14 @@ export default function TeamPage() {
         <Card className="bg-white shadow-md mt-6">
           <CardHeader>
             <CardTitle className="text-xl text-rfl-navy">Pending approvals</CardTitle>
-            <CardDescription>Approve or reject entries for this week</CardDescription>
+            <CardDescription>Approve or reject all pending entries</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               {pending.map((e) => (
                 <div key={e.id} className="p-3 border rounded flex items-center justify-between">
                   <div>
-                    <div className="font-medium text-rfl-navy">{e.accounts.first_name} — {new Date(e.date).toDateString()}</div>
+                    <div className="font-medium text-rfl-navy">{e.accounts.first_name} — {formatLocalDateLabel(e.date)}</div>
                     <div className="text-sm text-gray-600">
                       {e.type === 'rest' ? 'Rest Day' : `${e.workout_type || ''}`}
                       {e.duration ? ` • ${e.duration}m` : ''}
