@@ -34,6 +34,21 @@ function formatLocalDateLabel(yyyyMmDd: string): string {
   return dt.toDateString();
 }
 
+function startOfWeekMondayLocal(d: Date): Date {
+  const day = (d.getDay() + 6) % 7; // 0 = Monday
+  const copy = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  copy.setDate(copy.getDate() - day);
+  copy.setHours(0,0,0,0);
+  return copy;
+}
+
+function ymd(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export default function TeamPage() {
   const { data: session } = useSession();
   const userId = session?.user?.id;
@@ -54,17 +69,58 @@ export default function TeamPage() {
   }, [userId]);
 
   async function loadMembersSummary(currentTeamId: string) {
-    const { data } = await supabase.rpc('rfl_team_week_summary', { p_team_id: currentTeamId });
-    const rows = (data as Array<Record<string, unknown>>) || [];
-    const mapped: MemberRow[] = rows.map((r) => {
-      const name = String((r.name ?? r.first_name ?? r.user_name ?? '-') as string);
-      const user_id = String((r.user_id ?? r.id) as string);
-      const approved_points = Number((r.approved_points ?? r.points ?? r.total_points ?? r.sum_points ?? 0) as number);
-      const avg_rrVal = r.avg_rr ?? r.average_rr ?? r.rr ?? null;
-      const avg_rr = typeof avg_rrVal === 'number' ? Math.round(avg_rrVal * 100) / 100 : null;
-      return { user_id, name, approved_points, avg_rr };
+    // Compute current (Mon-Sun) week range locally
+    const ws = startOfWeekMondayLocal(new Date());
+    const we = new Date(ws); we.setDate(ws.getDate() + 6);
+
+    // Fetch team members
+    const { data: teamUsers } = await supabase
+      .from('accounts')
+      .select('id, first_name')
+      .eq('team_id', currentTeamId);
+    const memberMap = new Map<string, MemberRow>();
+    (teamUsers || []).forEach((u: any) => {
+      memberMap.set(String(u.id), {
+        user_id: String(u.id),
+        name: String(u.first_name || ''),
+        approved_points: 0,
+        avg_rr: null,
+      });
     });
-    setMembers(mapped);
+
+    // Fetch approved entries in week for team
+    const { data: entries } = await supabase
+      .from('entries')
+      .select('user_id, rr_value, date')
+      .eq('team_id', currentTeamId)
+      .eq('status', 'approved')
+      .gte('date', ymd(ws))
+      .lte('date', ymd(we));
+
+    const rrAgg = new Map<string, { sum: number; count: number }>();
+    (entries || []).forEach((e: any) => {
+      const uid = String(e.user_id);
+      const row = memberMap.get(uid);
+      if (row) {
+        row.approved_points += 1; // every approved entry counts as 1 point
+        if (typeof e.rr_value === 'number' && e.rr_value > 0) {
+          const agg = rrAgg.get(uid) || { sum: 0, count: 0 };
+          agg.sum += e.rr_value;
+          agg.count += 1;
+          rrAgg.set(uid, agg);
+        }
+      }
+    });
+
+    // finalize avg rr
+    rrAgg.forEach((agg, uid) => {
+      const row = memberMap.get(uid);
+      if (row) {
+        row.avg_rr = Math.round((agg.sum / Math.max(1, agg.count)) * 100) / 100;
+      }
+    });
+
+    setMembers(Array.from(memberMap.values()));
   }
 
   async function loadPending(currentTeamId: string, pageNum: number) {
