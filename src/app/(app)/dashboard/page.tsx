@@ -6,6 +6,7 @@ import { Plus, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { supabase } from "@/lib/supabase";
+import TeamProgressChart from "./TeamProgressChart";
 
 type ActivityRow = {
   date: string;
@@ -140,6 +141,9 @@ export default function DashboardPage() {
   const [teamPoints, setTeamPoints] = useState<number | null>(null);
   const [teamAvgRR, setTeamAvgRR] = useState<number | null>(null);
   const [teamPosition, setTeamPosition] = useState<number | null>(null);
+  const [chartDates, setChartDates] = useState<string[]>([]);
+  const [chartCumPoints, setChartCumPoints] = useState<number[]>([]);
+  const [chartCumAvgRR, setChartCumAvgRR] = useState<number[]>([]);
   const [viewWeekStart, setViewWeekStart] = useState<Date>(() => {
     const now = new Date();
     const y = now.getUTCFullYear();
@@ -326,6 +330,67 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId, viewWeekStart]);
 
+  // Build league-to-date progression chart data (cumulative points and avg RR)
+  useEffect(() => {
+    (async () => {
+      if (!userId) return;
+      let effectiveTeamId = teamId;
+      if (!effectiveTeamId) {
+        const { data: acct } = await supabase
+          .from('accounts')
+          .select('team_id')
+          .eq('id', userId)
+          .maybeSingle();
+        effectiveTeamId = (acct as any)?.team_id || null;
+        if (effectiveTeamId) setTeamId(effectiveTeamId);
+      }
+      if (!effectiveTeamId) return;
+
+      const start = firstWeekStart(new Date().getUTCFullYear());
+      const today = new Date();
+      const { data } = await supabase
+        .from('entries')
+        .select('date, rr_value')
+        .eq('team_id', effectiveTeamId)
+        .eq('status', 'approved')
+        .gte('date', formatDateYYYYMMDD(start))
+        .lte('date', formatDateYYYYMMDD(today));
+
+      const byDate = new Map<string, { count: number; rrSum: number; rrCount: number }>();
+      (data || []).forEach((e: any) => {
+        const d = String(e.date);
+        const rec = byDate.get(d) || { count: 0, rrSum: 0, rrCount: 0 };
+        rec.count += 1;
+        const rr = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
+        if (rr > 0) { rec.rrSum += rr; rec.rrCount += 1; }
+        byDate.set(d, rec);
+      });
+
+      const dates: string[] = [];
+      const cumPts: number[] = [];
+      const cumAvg: number[] = [];
+      let cursor = new Date(start);
+      let cPts = 0; let rrSum = 0; let rrCnt = 0;
+      while (cursor <= today) {
+        const ds = formatDateYYYYMMDD(cursor);
+        const rec = byDate.get(ds);
+        if (rec) {
+          cPts += rec.count;
+          rrSum += rec.rrSum;
+          rrCnt += rec.rrCount;
+        }
+        dates.push(ds);
+        cumPts.push(cPts);
+        cumAvg.push(rrCnt > 0 ? Math.round((rrSum / rrCnt) * 100) / 100 : 0);
+        cursor = addDaysUTC(cursor, 1);
+      }
+      setChartDates(dates);
+      setChartCumPoints(cumPts);
+      setChartCumAvgRR(cumAvg);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamId]);
+
   useEffect(() => {
     setDuration(currentConfig.minDuration || "");
     setDistance("");
@@ -469,6 +534,15 @@ export default function DashboardPage() {
                     <div className="text-xs text-gray-600">Your week points</div>
                     <div className="text-lg font-bold text-rfl-navy">{rows.reduce((a,r)=>a+(r.points||0),0)}</div>
                   </div>
+                </div>
+                {/* Progression chart */}
+                <div className="mt-4">
+                  <div className="text-xs font-semibold text-rfl-navy mb-2">League progression (cumulative)</div>
+                  {chartDates.length > 1 ? (
+                    <TeamProgressChart dates={chartDates} cumPoints={chartCumPoints} cumAvgRR={chartCumAvgRR} />
+                  ) : (
+                    <div className="text-xs text-gray-600">No data yet.</div>
+                  )}
                 </div>
               </div>
             </div>
