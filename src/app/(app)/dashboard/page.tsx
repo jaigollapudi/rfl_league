@@ -328,7 +328,7 @@ export default function DashboardPage() {
       setTeamAvgRR(teamRR);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamId, viewWeekStart]);
+  }, [teamId, viewWeekStart, userId]);
 
   // Build league-to-date progression chart data (cumulative points and avg RR)
   useEffect(() => {
@@ -389,7 +389,7 @@ export default function DashboardPage() {
       setChartCumAvgRR(cumAvg);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamId]);
+  }, [teamId, userId]);
 
   useEffect(() => {
     setDuration(currentConfig.minDuration || "");
@@ -537,7 +537,7 @@ export default function DashboardPage() {
                 </div>
                 {/* Progression chart */}
                 <div className="mt-4">
-                  <div className="text-xs font-semibold text-rfl-navy mb-2">League progression (cumulative)</div>
+                  <div className="text-xs font-semibold text-rfl-navy mb-2">{teamName ? `${teamName}'s cumulative league progression (Points & Avg RR)` : `League progression (Points & Avg RR)`}</div>
                   {chartDates.length > 1 ? (
                     <TeamProgressChart dates={chartDates} cumPoints={chartCumPoints} cumAvgRR={chartCumAvgRR} />
                   ) : (
