@@ -207,7 +207,7 @@ export default function DashboardPage() {
         holes: e?.holes ?? null,
         status: (e?.status as ActivityRow['status']) ?? null,
         rr_value: e?.rr_value ?? null,
-        points: null,
+        points: e && e.type === 'workout' && e.status === 'approved' ? 1 : 0,
       });
     }
     setRows(filled);
