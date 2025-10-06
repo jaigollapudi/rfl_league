@@ -35,32 +35,46 @@ export default function LeaderboardsPage() {
         .sort((a,b)=> b.points - a.points || (b.avg_rr||0) - (a.avg_rr||0));
       setTeams(teamsSorted);
 
-      // Individuals aggregation via one join so names/teams are guaranteed
-      const { data: playerJoined } = await supabase
+      // Individuals robust aggregation: entries -> accounts (names, team_id) -> teams (names)
+      const { data: eRows } = await supabase
         .from('entries')
-        .select('user_id, rr_value, accounts!inner(first_name, teams(name))')
+        .select('user_id, rr_value')
         .eq('status','approved');
 
-      const pMap = new Map<string, { name: string; team: string | null; points: number; rrSum: number; rrCount: number }>();
-      (playerJoined || []).forEach((e: any) => {
+      const agg = new Map<string, { points: number; rrSum: number; rrCount: number }>();
+      (eRows || []).forEach((e: any) => {
         const uid = String(e.user_id);
-        const name = e.accounts?.first_name || '—';
-        const team = e.accounts?.teams?.name || null;
-        const rec = pMap.get(uid) || { name, team, points: 0, rrSum: 0, rrCount: 0 };
-        rec.name = name; // ensure latest
-        rec.team = team;
+        const rec = agg.get(uid) || { points: 0, rrSum: 0, rrCount: 0 };
         rec.points += 1;
         if (typeof e.rr_value === 'number' && e.rr_value > 0) { rec.rrSum += e.rr_value; rec.rrCount += 1; }
-        pMap.set(uid, rec);
+        agg.set(uid, rec);
       });
 
-      const playersAll: PlayerRow[] = Array.from(pMap.entries()).map(([user_id, r]) => ({
-        user_id,
-        name: r.name,
-        team: r.team,
-        points: r.points,
-        avg_rr: r.rrCount ? Math.round((r.rrSum / r.rrCount) * 100) / 100 : null,
-      })).sort((a,b)=> b.points - a.points || (b.avg_rr||0) - (a.avg_rr||0));
+      const userIds = Array.from(agg.keys());
+      const { data: users } = userIds.length ? await supabase
+        .from('accounts')
+        .select('id, first_name, team_id')
+        .in('id', userIds) : { data: [] } as any;
+
+      const teamIds = Array.from(new Set((users || []).map((u: any)=> String(u.team_id)).filter(Boolean)));
+      const { data: teamsMeta } = teamIds.length ? await supabase
+        .from('teams')
+        .select('id, name')
+        .in('id', teamIds) : { data: [] } as any;
+      const teamNameById = new Map<string,string>();
+      (teamsMeta || []).forEach((t:any)=> teamNameById.set(String(t.id), String(t.name)));
+
+      const playersAll: PlayerRow[] = (users || []).map((u:any)=>{
+        const uid = String(u.id);
+        const a = agg.get(uid) || { points: 0, rrSum: 0, rrCount: 0 };
+        return {
+          user_id: uid,
+          name: String(u.first_name || '—'),
+          team: u.team_id ? (teamNameById.get(String(u.team_id)) || null) : null,
+          points: a.points,
+          avg_rr: a.rrCount ? Math.round((a.rrSum / a.rrCount) * 100) / 100 : null,
+        } as PlayerRow;
+      }).sort((a,b)=> b.points - a.points || (b.avg_rr||0) - (a.avg_rr||0));
 
       const from = (page - 1) * pageSize;
       const to = from + pageSize;
