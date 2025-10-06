@@ -220,7 +220,7 @@ export default function DashboardPage() {
         holes: e?.holes ?? null,
         status: (e?.status as ActivityRow['status']) ?? null,
         rr_value: e?.rr_value ?? null,
-        points: e && e.type === 'workout' && e.status === 'approved' ? 1 : 0,
+        points: e && e.status === 'approved' ? 1 : 0,
       });
     }
     setRows(filled);
@@ -250,7 +250,7 @@ export default function DashboardPage() {
         .eq('status', 'approved');
       setRestUsed(count || 0);
 
-      // Fetch leaderboard to compute team summary and position
+      // Fetch leaderboard to compute team position (overall)
       const { data: leaderboard } = await supabase.rpc('rfl_team_leaderboard');
       const rowsAny = (leaderboard as unknown as Array<Record<string, unknown>>) || [];
       // Try to derive rank by points desc, rr desc if not present
@@ -292,6 +292,29 @@ export default function DashboardPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, viewWeekStart]);
+
+  // Compute Team weekly summary (approved entries only) for current week
+  useEffect(() => {
+    (async () => {
+      if (!teamId) return;
+      const ws = viewWeekStart;
+      const we = new Date(ws); we.setUTCDate(ws.getUTCDate() + 6);
+      const { data } = await supabase
+        .from('entries')
+        .select('id, rr_value')
+        .eq('team_id', teamId)
+        .eq('status', 'approved')
+        .gte('date', formatDateYYYYMMDD(ws))
+        .lte('date', formatDateYYYYMMDD(we));
+      const entries = (data || []) as Array<{ id: string; rr_value: number | null }>;
+      const teamPts = entries.length; // every approved entry counts 1
+      const rrVals = entries.map(e => (typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0))).filter(v => v > 0);
+      const teamRR = rrVals.length ? Math.round((rrVals.reduce((a,b)=>a+b,0)/rrVals.length)*100)/100 : null;
+      setTeamPoints(teamPts);
+      setTeamAvgRR(teamRR);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamId, viewWeekStart]);
 
   useEffect(() => {
     setDuration(currentConfig.minDuration || "");
