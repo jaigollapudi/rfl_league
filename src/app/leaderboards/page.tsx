@@ -10,6 +10,7 @@ type PlayerRow = { user_id: string; name: string; team: string | null; points: n
 export default function LeaderboardsPage() {
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [players, setPlayers] = useState<PlayerRow[]>([]);
+  const [playersTotal, setPlayersTotal] = useState<number>(0);
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
@@ -34,25 +35,48 @@ export default function LeaderboardsPage() {
         .sort((a,b)=> b.points - a.points || (b.avg_rr||0) - (a.avg_rr||0));
       setTeams(teamsSorted);
 
-      // Individuals with pagination
-      const { data: playerAgg } = await supabase
+      // Individuals aggregation (two-step to avoid cross-table join issues)
+      const { data: playerEntries } = await supabase
         .from('entries')
-        .select('user_id, rr_value, accounts(first_name, teams(name))')
+        .select('user_id, rr_value')
         .eq('status','approved');
-      const playerMap = new Map<string, { name: string; team: string | null; points: number; rrSum: number; rrCount: number }>();
-      (playerAgg || []).forEach((e: any) => {
+
+      const aggMap = new Map<string, { points: number; rrSum: number; rrCount: number }>();
+      (playerEntries || []).forEach((e: any) => {
         const uid = String(e.user_id);
-        const name = e.accounts?.first_name || '—';
-        const team = e.accounts?.teams?.name || null;
-        const rec = playerMap.get(uid) || { name, team, points: 0, rrSum: 0, rrCount: 0 };
+        const rec = aggMap.get(uid) || { points: 0, rrSum: 0, rrCount: 0 };
         rec.points += 1;
         if (typeof e.rr_value === 'number' && e.rr_value > 0) { rec.rrSum += e.rr_value; rec.rrCount += 1; }
-        playerMap.set(uid, rec);
+        aggMap.set(uid, rec);
       });
-      const playersAll: PlayerRow[] = Array.from(playerMap.entries()).map(([user_id, r]) => ({ user_id, name: r.name, team: r.team, points: r.points, avg_rr: r.rrCount ? Math.round((r.rrSum/r.rrCount)*100)/100 : null }))
-        .sort((a,b)=> b.points - a.points || (b.avg_rr||0) - (a.avg_rr||0));
+
+      const userIds = Array.from(aggMap.keys());
+      let usersMeta: Record<string, { name: string; team: string | null }> = {};
+      if (userIds.length) {
+        const { data: users } = await supabase
+          .from('accounts')
+          .select('id, first_name, teams(name)')
+          .in('id', userIds);
+        (users || []).forEach((u: any) => {
+          usersMeta[String(u.id)] = { name: u.first_name || '—', team: u.teams?.name || null };
+        });
+      }
+
+      const playersAll: PlayerRow[] = userIds.map((uid) => {
+        const a = aggMap.get(uid)!;
+        const meta = usersMeta[uid] || { name: '—', team: null };
+        return {
+          user_id: uid,
+          name: meta.name,
+          team: meta.team,
+          points: a.points,
+          avg_rr: a.rrCount ? Math.round((a.rrSum / a.rrCount) * 100) / 100 : null,
+        };
+      }).sort((a,b)=> b.points - a.points || (b.avg_rr||0) - (a.avg_rr||0));
+
       const from = (page - 1) * pageSize;
       const to = from + pageSize;
+      setPlayersTotal(playersAll.length);
       setPlayers(playersAll.slice(from, to));
     })();
   }, [page]);
@@ -129,7 +153,7 @@ export default function LeaderboardsPage() {
             <div className="mt-4 flex items-center justify-center gap-2">
               <button className={`p-1 rounded border ${page > 1 ? 'hover:bg-gray-50' : 'opacity-50 cursor-not-allowed'}`} onClick={()=>page>1 && setPage(page-1)} aria-label="Previous page">‹</button>
               <div className="px-3 py-1 rounded bg-gray-100 text-sm font-medium text-gray-800">Page {page}</div>
-              <button className={`p-1 rounded border ${players.length === pageSize ? 'hover:bg-gray-50' : 'opacity-50 cursor-not-allowed'}`} onClick={()=> players.length === pageSize && setPage(page+1)} aria-label="Next page">›</button>
+              <button className={`p-1 rounded border ${page * pageSize < playersTotal ? 'hover:bg-gray-50' : 'opacity-50 cursor-not-allowed'}`} onClick={()=> page * pageSize < playersTotal && setPage(page+1)} aria-label="Next page">›</button>
             </div>
           </CardContent>
         </Card>
