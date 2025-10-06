@@ -10,23 +10,58 @@ type PlayerRow = { user_id: string; name: string; team: string | null; points: n
 export default function LeaderboardsPage() {
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [players, setPlayers] = useState<PlayerRow[]>([]);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   useEffect(() => {
     (async () => {
-      const [{ data: t }, { data: p }] = await Promise.all([
-        supabase.rpc('rfl_team_leaderboard', {}),
-        supabase.rpc('rfl_individual_leaderboard', {}),
-      ]);
-      setTeams((t as TeamRow[]) || []);
-      setPlayers((p as PlayerRow[]) || []);
+      // Aggregate all-time approved entries
+      const { data: teamAgg } = await supabase
+        .from('entries')
+        .select('team_id, rr_value, teams(name)', { count: 'exact' })
+        .eq('status', 'approved');
+
+      const teamMap = new Map<string, { name: string; points: number; rrSum: number; rrCount: number }>();
+      (teamAgg || []).forEach((e: any) => {
+        const tid = String(e.team_id);
+        const name = e.teams?.name || '—';
+        const rec = teamMap.get(tid) || { name, points: 0, rrSum: 0, rrCount: 0 };
+        rec.points += 1;
+        if (typeof e.rr_value === 'number' && e.rr_value > 0) { rec.rrSum += e.rr_value; rec.rrCount += 1; }
+        teamMap.set(tid, rec);
+      });
+      const teamsSorted: TeamRow[] = Array.from(teamMap.entries()).map(([team_id, r]) => ({ team_id, team_name: r.name, points: r.points, avg_rr: r.rrCount ? Math.round((r.rrSum/r.rrCount)*100)/100 : null }))
+        .sort((a,b)=> b.points - a.points || (b.avg_rr||0) - (a.avg_rr||0));
+      setTeams(teamsSorted);
+
+      // Individuals with pagination
+      const { data: playerAgg } = await supabase
+        .from('entries')
+        .select('user_id, rr_value, accounts(first_name, teams(name))')
+        .eq('status','approved');
+      const playerMap = new Map<string, { name: string; team: string | null; points: number; rrSum: number; rrCount: number }>();
+      (playerAgg || []).forEach((e: any) => {
+        const uid = String(e.user_id);
+        const name = e.accounts?.first_name || '—';
+        const team = e.accounts?.teams?.name || null;
+        const rec = playerMap.get(uid) || { name, team, points: 0, rrSum: 0, rrCount: 0 };
+        rec.points += 1;
+        if (typeof e.rr_value === 'number' && e.rr_value > 0) { rec.rrSum += e.rr_value; rec.rrCount += 1; }
+        playerMap.set(uid, rec);
+      });
+      const playersAll: PlayerRow[] = Array.from(playerMap.entries()).map(([user_id, r]) => ({ user_id, name: r.name, team: r.team, points: r.points, avg_rr: r.rrCount ? Math.round((r.rrSum/r.rrCount)*100)/100 : null }))
+        .sort((a,b)=> b.points - a.points || (b.avg_rr||0) - (a.avg_rr||0));
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize;
+      setPlayers(playersAll.slice(from, to));
     })();
-  }, []);
+  }, [page]);
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-rfl-navy mb-2">Leaderboards</h1>
-        <p className="text-gray-600">Live standings for the current week (approved entries)</p>
+        <p className="text-gray-600">Live standings across all approved entries</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -89,6 +124,12 @@ export default function LeaderboardsPage() {
                 </div>
               ))}
               {!players.length && <div className="text-gray-600">No data yet.</div>}
+            </div>
+            {/* Pagination */}
+            <div className="mt-4 flex items-center justify-center gap-2">
+              <button className={`p-1 rounded border ${page > 1 ? 'hover:bg-gray-50' : 'opacity-50 cursor-not-allowed'}`} onClick={()=>page>1 && setPage(page-1)} aria-label="Previous page">‹</button>
+              <div className="px-3 py-1 rounded bg-gray-100 text-sm font-medium text-gray-800">Page {page}</div>
+              <button className={`p-1 rounded border ${players.length === pageSize ? 'hover:bg-gray-50' : 'opacity-50 cursor-not-allowed'}`} onClick={()=> players.length === pageSize && setPage(page+1)} aria-label="Next page">›</button>
             </div>
           </CardContent>
         </Card>
