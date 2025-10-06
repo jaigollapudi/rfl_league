@@ -296,13 +296,23 @@ export default function DashboardPage() {
   // Compute Team weekly summary (approved entries only) for current week
   useEffect(() => {
     (async () => {
-      if (!teamId) return;
+      let effectiveTeamId = teamId;
+      if (!effectiveTeamId && userId) {
+        const { data: acct } = await supabase
+          .from('accounts')
+          .select('team_id')
+          .eq('id', userId)
+          .maybeSingle();
+        effectiveTeamId = (acct as any)?.team_id || null;
+        if (effectiveTeamId) setTeamId(effectiveTeamId);
+      }
+      if (!effectiveTeamId) return;
       const ws = viewWeekStart;
       const we = new Date(ws); we.setUTCDate(ws.getUTCDate() + 6);
       const { data } = await supabase
         .from('entries')
         .select('id, rr_value')
-        .eq('team_id', teamId)
+        .eq('team_id', effectiveTeamId)
         .eq('status', 'approved')
         .gte('date', formatDateYYYYMMDD(ws))
         .lte('date', formatDateYYYYMMDD(we));
