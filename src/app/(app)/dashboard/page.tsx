@@ -42,6 +42,13 @@ function seasonEndStart(year: number): Date {
   return new Date(Date.UTC(year, 11, 1)); // Dec = 11
 }
 
+function formatLocalDateLabel(yyyyMmDd: string): string {
+  // Parse as local date to avoid timezone shifts (YYYY-MM-DD is treated as UTC if passed to Date constructor)
+  const [y, m, d] = yyyyMmDd.split('-').map((v) => parseInt(v, 10));
+  const localDate = new Date(y, (m || 1) - 1, d || 1);
+  return localDate.toDateString();
+}
+
 type ActivityConfig = {
   name: string;
   fields: Array<'duration' | 'distance' | 'steps' | 'holes'>;
@@ -462,7 +469,7 @@ export default function DashboardPage() {
               {rows.map((r) => (
                 <div key={r.date} className="flex items-center justify-between p-3 bg-white rounded border">
                   <div>
-                    <div className="font-medium text-rfl-navy">{new Date(r.date).toDateString()}</div>
+                    <div className="font-medium text-rfl-navy">{formatLocalDateLabel(r.date)}</div>
                     <div className="text-sm text-gray-600">
                       {r?.type ? (r.type === 'rest' ? 'Rest Day' : r.workout_type) : 'No entry'}
                     </div>
