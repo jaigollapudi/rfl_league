@@ -69,10 +69,6 @@ export default function TeamPage() {
   }, [userId]);
 
   async function loadMembersSummary(currentTeamId: string) {
-    // Compute current (Mon-Sun) week range locally
-    const ws = startOfWeekMondayLocal(new Date());
-    const we = new Date(ws); we.setDate(ws.getDate() + 6);
-
     // Fetch team members
     const { data: teamUsers } = await supabase
       .from('accounts')
@@ -88,14 +84,12 @@ export default function TeamPage() {
       });
     });
 
-    // Fetch approved entries in week for team
+    // Fetch ALL approved entries for team (no date filter)
     const { data: entries } = await supabase
       .from('entries')
-      .select('user_id, rr_value, date')
+      .select('user_id, rr_value')
       .eq('team_id', currentTeamId)
-      .eq('status', 'approved')
-      .gte('date', ymd(ws))
-      .lte('date', ymd(we));
+      .eq('status', 'approved');
 
     const rrAgg = new Map<string, { sum: number; count: number }>();
     (entries || []).forEach((e: any) => {
