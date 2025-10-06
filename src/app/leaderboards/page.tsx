@@ -35,65 +35,32 @@ export default function LeaderboardsPage() {
         .sort((a,b)=> b.points - a.points || (b.avg_rr||0) - (a.avg_rr||0));
       setTeams(teamsSorted);
 
-      // Individuals aggregation (two-step to avoid cross-table join issues)
-      const { data: playerEntries } = await supabase
+      // Individuals aggregation via one join so names/teams are guaranteed
+      const { data: playerJoined } = await supabase
         .from('entries')
-        .select('user_id, rr_value')
+        .select('user_id, rr_value, accounts!inner(first_name, teams(name))')
         .eq('status','approved');
 
-      const aggMap = new Map<string, { points: number; rrSum: number; rrCount: number }>();
-      (playerEntries || []).forEach((e: any) => {
+      const pMap = new Map<string, { name: string; team: string | null; points: number; rrSum: number; rrCount: number }>();
+      (playerJoined || []).forEach((e: any) => {
         const uid = String(e.user_id);
-        const rec = aggMap.get(uid) || { points: 0, rrSum: 0, rrCount: 0 };
+        const name = e.accounts?.first_name || '—';
+        const team = e.accounts?.teams?.name || null;
+        const rec = pMap.get(uid) || { name, team, points: 0, rrSum: 0, rrCount: 0 };
+        rec.name = name; // ensure latest
+        rec.team = team;
         rec.points += 1;
         if (typeof e.rr_value === 'number' && e.rr_value > 0) { rec.rrSum += e.rr_value; rec.rrCount += 1; }
-        aggMap.set(uid, rec);
+        pMap.set(uid, rec);
       });
 
-      const userIds = Array.from(aggMap.keys());
-      let usersMeta: Record<string, { name: string; team: string | null }> = {};
-      if (userIds.length) {
-        let users: any[] | null = null;
-        try {
-          const res = await supabase
-            .from('accounts')
-            .select('id, first_name, teams(name)')
-            .in('id', userIds);
-          users = res.data as any[] | null;
-        } catch (e) {
-          users = null;
-        }
-        if (!users || users.length === 0) {
-          // Fallback: pull metadata via entries join (RLS-safe in some setups)
-          const { data: joined } = await supabase
-            .from('entries')
-            .select('user_id, accounts!inner(first_name, teams(name))')
-            .eq('status','approved')
-            .in('user_id', userIds);
-          (joined || []).forEach((row: any) => {
-            usersMeta[String(row.user_id)] = {
-              name: row.accounts?.first_name || '—',
-              team: row.accounts?.teams?.name || null,
-            };
-          });
-        } else {
-          (users || []).forEach((u: any) => {
-            usersMeta[String(u.id)] = { name: u.first_name || '—', team: u.teams?.name || null };
-          });
-        }
-      }
-
-      const playersAll: PlayerRow[] = userIds.map((uid) => {
-        const a = aggMap.get(uid)!;
-        const meta = usersMeta[uid] || { name: '—', team: null };
-        return {
-          user_id: uid,
-          name: meta.name,
-          team: meta.team,
-          points: a.points,
-          avg_rr: a.rrCount ? Math.round((a.rrSum / a.rrCount) * 100) / 100 : null,
-        };
-      }).sort((a,b)=> b.points - a.points || (b.avg_rr||0) - (a.avg_rr||0));
+      const playersAll: PlayerRow[] = Array.from(pMap.entries()).map(([user_id, r]) => ({
+        user_id,
+        name: r.name,
+        team: r.team,
+        points: r.points,
+        avg_rr: r.rrCount ? Math.round((r.rrSum / r.rrCount) * 100) / 100 : null,
+      })).sort((a,b)=> b.points - a.points || (b.avg_rr||0) - (a.avg_rr||0));
 
       const from = (page - 1) * pageSize;
       const to = from + pageSize;
