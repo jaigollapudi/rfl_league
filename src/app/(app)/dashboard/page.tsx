@@ -22,14 +22,6 @@ type ActivityRow = {
 
 const todayStr = () => new Date().toISOString().split("T")[0];
 
-function startOfWeekMonday(d: Date): Date {
-  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-  const day = date.getUTCDay();
-  const diff = (day + 6) % 7; // Monday = 0
-  date.setUTCDate(date.getUTCDate() - diff);
-  return date;
-}
-
 function formatDateYYYYMMDD(d: Date): string {
   return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
     .toISOString()
@@ -38,6 +30,16 @@ function formatDateYYYYMMDD(d: Date): string {
 
 function addDaysUTC(d: Date, days: number): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + days));
+}
+
+function firstWeekStart(year: number): Date {
+  // Week 1 starts exactly on Sept 1 (Mon–Sun blocks thereafter)
+  return new Date(Date.UTC(year, 8, 1)); // Sept = 8
+}
+
+function seasonEndStart(year: number): Date {
+  // Last allowed week start is Dec 1
+  return new Date(Date.UTC(year, 11, 1)); // Dec = 11
 }
 
 type ActivityConfig = {
@@ -125,7 +127,17 @@ export default function DashboardPage() {
   const [teamPoints, setTeamPoints] = useState<number | null>(null);
   const [teamAvgRR, setTeamAvgRR] = useState<number | null>(null);
   const [teamPosition, setTeamPosition] = useState<number | null>(null);
-  const [viewWeekStart, setViewWeekStart] = useState<Date>(() => startOfWeekMonday(new Date()));
+  const [viewWeekStart, setViewWeekStart] = useState<Date>(() => {
+    const now = new Date();
+    const y = now.getUTCFullYear();
+    const seasonStart = firstWeekStart(y);
+    const end = seasonEndStart(y);
+    let idx = Math.floor((new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).getTime() - seasonStart.getTime()) / (7 * 24 * 3600 * 1000));
+    if (idx < 0) idx = 0;
+    const maxIdx = Math.floor((end.getTime() - seasonStart.getTime()) / (7 * 24 * 3600 * 1000));
+    if (idx > maxIdx) idx = maxIdx;
+    return addDaysUTC(seasonStart, idx * 7);
+  });
 
   const currentConfig = ACTIVITY_CONFIGS[activity];
 
@@ -167,7 +179,7 @@ export default function DashboardPage() {
 
   async function fetchActivity(weekStart?: Date) {
     if (!userId) return;
-    const ws = startOfWeekMonday(weekStart || viewWeekStart);
+    const ws = weekStart || viewWeekStart;
     const we = new Date(ws);
     we.setUTCDate(ws.getUTCDate() + 6);
     const { data, error } = await supabase
@@ -335,15 +347,15 @@ export default function DashboardPage() {
   }
 
   // League bounds (Sept 1 to Dec 1 of current year) for navigation
-  const currentYear = new Date().getFullYear();
-  const seasonStart = startOfWeekMonday(new Date(Date.UTC(currentYear, 8, 1))); // Sept
-  const seasonEnd = startOfWeekMonday(new Date(Date.UTC(currentYear, 11, 1))); // Dec
-  const canGoPrev = startOfWeekMonday(new Date(viewWeekStart)) > seasonStart;
-  const canGoNext = startOfWeekMonday(new Date(viewWeekStart)) < seasonEnd;
+  const currentYear = new Date().getUTCFullYear();
+  const seasonStart = firstWeekStart(currentYear);
+  const seasonEnd = seasonEndStart(currentYear);
+  const canGoPrev = viewWeekStart.getTime() > seasonStart.getTime();
+  const canGoNext = viewWeekStart.getTime() < seasonEnd.getTime();
   const weekNumber = Math.max(
     1,
     Math.floor(
-      (startOfWeekMonday(new Date(viewWeekStart)).getTime() - seasonStart.getTime()) /
+      (viewWeekStart.getTime() - seasonStart.getTime()) /
         (7 * 24 * 3600 * 1000)
     ) + 1
   );
@@ -424,9 +436,8 @@ export default function DashboardPage() {
                 <button
                   className={`p-1 rounded border ${canGoPrev ? 'hover:bg-gray-50' : 'opacity-50 cursor-not-allowed'}`}
                   onClick={() => canGoPrev && setViewWeekStart(prev => {
-                    const ws = startOfWeekMonday(prev);
-                    const prevWs = addDaysUTC(ws, -7);
-                    return prevWs < seasonStart ? seasonStart : prevWs;
+                    const prevWs = addDaysUTC(prev, -7);
+                    return prevWs.getTime() < seasonStart.getTime() ? seasonStart : prevWs;
                   })}
                   aria-label="Previous week"
                 >
@@ -436,9 +447,8 @@ export default function DashboardPage() {
                 <button
                   className={`p-1 rounded border ${canGoNext ? 'hover:bg-gray-50' : 'opacity-50 cursor-not-allowed'}`}
                   onClick={() => canGoNext && setViewWeekStart(prev => {
-                    const ws = startOfWeekMonday(prev);
-                    const nextWs = addDaysUTC(ws, 7);
-                    return nextWs > seasonEnd ? seasonEnd : nextWs;
+                    const nextWs = addDaysUTC(prev, 7);
+                    return nextWs.getTime() > seasonEnd.getTime() ? seasonEnd : nextWs;
                   })}
                   aria-label="Next week"
                 >
