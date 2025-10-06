@@ -36,6 +36,10 @@ function formatDateYYYYMMDD(d: Date): string {
     .split("T")[0];
 }
 
+function addDaysUTC(d: Date, days: number): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + days));
+}
+
 type ActivityConfig = {
   name: string;
   fields: Array<'duration' | 'distance' | 'steps' | 'holes'>;
@@ -419,7 +423,11 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2">
                 <button
                   className={`p-1 rounded border ${canGoPrev ? 'hover:bg-gray-50' : 'opacity-50 cursor-not-allowed'}`}
-                  onClick={() => canGoPrev && setViewWeekStart(prev => { const d = new Date(prev); d.setUTCDate(d.getUTCDate() - 7); return startOfWeekMonday(d); })}
+                  onClick={() => canGoPrev && setViewWeekStart(prev => {
+                    const ws = startOfWeekMonday(prev);
+                    const prevWs = addDaysUTC(ws, -7);
+                    return prevWs < seasonStart ? seasonStart : prevWs;
+                  })}
                   aria-label="Previous week"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -427,7 +435,11 @@ export default function DashboardPage() {
                 <div className="px-3 py-1 rounded bg-gray-100 text-sm font-medium text-gray-800">Week {weekNumber}</div>
                 <button
                   className={`p-1 rounded border ${canGoNext ? 'hover:bg-gray-50' : 'opacity-50 cursor-not-allowed'}`}
-                  onClick={() => canGoNext && setViewWeekStart(prev => { const d = new Date(prev); d.setUTCDate(d.getUTCDate() + 7); return startOfWeekMonday(d); })}
+                  onClick={() => canGoNext && setViewWeekStart(prev => {
+                    const ws = startOfWeekMonday(prev);
+                    const nextWs = addDaysUTC(ws, 7);
+                    return nextWs > seasonEnd ? seasonEnd : nextWs;
+                  })}
                   aria-label="Next week"
                 >
                   <ChevronRight className="w-4 h-4" />
