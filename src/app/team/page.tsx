@@ -87,7 +87,7 @@ export default function TeamPage() {
     // Fetch ALL approved entries for team (no date filter)
     const { data: entries } = await supabase
       .from('entries')
-      .select('user_id, rr_value')
+      .select('user_id, rr_value, type')
       .eq('team_id', currentTeamId)
       .eq('status', 'approved');
 
@@ -96,10 +96,12 @@ export default function TeamPage() {
       const uid = String(e.user_id);
       const row = memberMap.get(uid);
       if (row) {
-        row.approved_points += 1; // every approved entry counts as 1 point
-        if (typeof e.rr_value === 'number' && e.rr_value > 0) {
+        const rrNum = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
+        const isRest = e.type === 'rest';
+        row.approved_points += isRest ? (rrNum > 0 ? 1 : 0) : 1;
+        if (rrNum > 0) {
           const agg = rrAgg.get(uid) || { sum: 0, count: 0 };
-          agg.sum += e.rr_value;
+          agg.sum += rrNum;
           agg.count += 1;
           rrAgg.set(uid, agg);
         }
@@ -114,7 +116,8 @@ export default function TeamPage() {
       }
     });
 
-    setMembers(Array.from(memberMap.values()));
+    const sortedMembers = Array.from(memberMap.values()).sort((a,b)=> (b.approved_points||0)-(a.approved_points||0) || ((b.avg_rr||0)-(a.avg_rr||0)) );
+    setMembers(sortedMembers);
   }
 
   async function loadPending(currentTeamId: string, pageNum: number) {
@@ -184,13 +187,16 @@ export default function TeamPage() {
       <Card className="bg-white shadow-md">
         <CardHeader>
           <CardTitle className="text-xl text-rfl-navy">Members</CardTitle>
-          <CardDescription>Sorted by points</CardDescription>
+          <CardDescription>Sorted by points & RR</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {members.map((m) => (
+            {members.map((m, idx) => (
               <div key={m.user_id} className="flex items-center justify-between p-3 border rounded">
-                <div className="font-medium text-rfl-navy">{m.name}</div>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-rfl-navy text-white flex items-center justify-center font-semibold">{idx+1}</div>
+                  <div className="font-medium text-rfl-navy">{m.name}</div>
+                </div>
                 <div className="flex items-center gap-6 text-sm">
                   <div className="text-center">
                     <div className="font-semibold text-rfl-coral">{m.approved_points ?? 0}</div>
@@ -213,8 +219,13 @@ export default function TeamPage() {
         <>
           <Card className="bg-white shadow-md mt-6">
             <CardHeader>
-              <CardTitle className="text-xl text-rfl-navy">Pending approvals</CardTitle>
-              <CardDescription>Approve or reject all pending entries</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl text-rfl-navy">Pending approvals</CardTitle>
+                  <CardDescription>Approve or reject all pending entries</CardDescription>
+                </div>
+                <div className="px-3 py-1 text-xs font-semibold rounded-full border bg-white">Pending: {pendingCount}</div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
