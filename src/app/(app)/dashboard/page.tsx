@@ -136,6 +136,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [restUsed, setRestUsed] = useState<number>(0);
   const [validationError, setValidationError] = useState<string>("");
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofError, setProofError] = useState<string>("");
   const [teamId, setTeamId] = useState<string | null>(null);
   const [teamName, setTeamName] = useState<string>("");
   const [teamPoints, setTeamPoints] = useState<number | null>(null);
@@ -157,6 +159,7 @@ export default function DashboardPage() {
   });
 
   const currentConfig = ACTIVITY_CONFIGS[activity];
+  const PROOF_BUCKET = (process.env.NEXT_PUBLIC_PROOF_BUCKET as string) || 'rofl_proof_pics';
 
   const validateWorkout = useMemo(() => {
     if (!userId) return { valid: false, error: "" };
@@ -397,12 +400,18 @@ export default function DashboardPage() {
     setSteps("");
     setHoles("");
     setValidationError("");
+    setProofError("");
+    setProofFile(null);
   }, [activity, currentConfig.minDuration]);
 
   async function onSaveWorkout() {
     if (!userId) return;
     if (!validateWorkout.valid) {
       setValidationError(validateWorkout.error);
+      return;
+    }
+    if (!proofFile) {
+      setProofError('Please upload a screenshot/photo as proof.');
       return;
     }
     if (date > todayStr()) {
@@ -421,6 +430,17 @@ export default function DashboardPage() {
 
     setLoading(true);
     try {
+      // 1) Upload proof image to Supabase Storage
+      const safeName = proofFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filePath = `${userId}/${date}/${Date.now()}-${safeName}`;
+      const { error: uploadErr } = await supabase.storage.from(PROOF_BUCKET).upload(filePath, proofFile, {
+        cacheControl: '3600', upsert: true, contentType: proofFile.type || 'image/jpeg'
+      });
+      if (uploadErr) { setProofError('Upload failed, please try again.'); throw uploadErr; }
+      const { data: pub } = supabase.storage.from(PROOF_BUCKET).getPublicUrl(filePath);
+      const proofUrl = pub?.publicUrl || null;
+
+      // 2) Save workout entry with proof URL as pending for leader approval
       await supabase.rpc("rfl_upsert_workout", {
         p_user_id: userId,
         p_date: date,
@@ -430,11 +450,13 @@ export default function DashboardPage() {
         p_distance: distance === "" ? null : (distance as number),
         p_steps: steps === "" ? null : Number(steps),
         p_holes: holes === "" ? null : Number(holes),
-        p_proof_url: null,
-        p_status: "approved",
+        p_proof_url: proofUrl,
+        p_status: "pending",
       });
       setOpenWorkout(false);
       setValidationError("");
+      setProofError("");
+      setProofFile(null);
       await fetchActivity(viewWeekStart);
     } finally {
       setLoading(false);
@@ -613,6 +635,9 @@ export default function DashboardPage() {
             {validationError && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">{validationError}</div>
             )}
+            {proofError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">{proofError}</div>
+            )}
             <div className="space-y-3">
               <label className="block text-sm font-medium text-gray-700">Date</label>
               <input value={date} onChange={(e)=>setDate(e.target.value)} type="date" max={todayStr()} className="w-full border rounded-md px-3 py-2" />
@@ -658,6 +683,18 @@ export default function DashboardPage() {
                     <input value={holes ?? ''} onChange={(e)=>{ setHoles(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
                   </div>
                 )}
+              </div>
+
+              {/* Proof upload */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Upload proof (image)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e)=>{ setProofFile(e.target.files && e.target.files[0] ? e.target.files[0] : null); setProofError(""); }}
+                  className="w-full border rounded-md px-3 py-2"
+                />
+                <div className="text-xs text-gray-500 mt-1">Required. Screenshots/photos only.</div>
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-3">

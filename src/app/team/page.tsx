@@ -58,6 +58,7 @@ export default function TeamPage() {
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [page, setPage] = useState<number>(1);
   const pageSize = 10;
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   // discover the user's team
   useEffect(() => {
@@ -243,6 +244,9 @@ export default function TeamPage() {
                       </div>
                     </div>
                     <div className="flex gap-2">
+                      {e.proof_url && (
+                        <button className="px-3 py-1 rounded border text-blue-700 border-blue-300 hover:bg-blue-50" onClick={()=> setPreviewUrl(e.proof_url!)}>View</button>
+                      )}
                       <button className="px-3 py-1 rounded border text-green-700 border-green-300 hover:bg-green-50" onClick={async()=>{
                         await supabase.from('entries').update({ status: 'approved' }).eq('id', e.id);
                         setPending(p=>p.filter(x=>x.id!==e.id));
@@ -280,6 +284,20 @@ export default function TeamPage() {
               </div>
             </CardContent>
           </Card>
+
+        {/* Proof preview modal */}
+        {previewUrl && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={()=> setPreviewUrl(null)}>
+            <div className="bg-white rounded-lg shadow-xl max-w-3xl w-[90%] p-3" onClick={(e)=> e.stopPropagation()}>
+              <div className="flex justify-end mb-2">
+                <button className="text-gray-500 hover:text-gray-700" onClick={()=> setPreviewUrl(null)}>✕</button>
+              </div>
+              <div className="w-full flex justify-center">
+                <img src={previewUrl} alt="Proof" className="max-h-[75vh] object-contain" />
+              </div>
+            </div>
+          </div>
+        )}
 
           {pendingCount > 0 && (
             <div className="mt-4">
