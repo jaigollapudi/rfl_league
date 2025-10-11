@@ -3,7 +3,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 
 type MemberRow = {
   user_id: string;
@@ -59,6 +59,7 @@ export default function TeamPage() {
   const [page, setPage] = useState<number>(1);
   const pageSize = 10;
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const supabase = getSupabase();
 
   // discover the user's team
   useEffect(() => {
