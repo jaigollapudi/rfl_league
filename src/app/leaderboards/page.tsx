@@ -40,17 +40,17 @@ export default function LeaderboardsPage() {
           const { data: users } = userIds.length ? await supabase
             .from('accounts')
             .select('id, first_name, team_id')
-            .in('id', userIds) : { data: [] } as any;
+            .in('id', userIds) : { data: [] } as { data: Array<{ id: string; first_name: string; team_id: string | null }> };
 
-          const teamIds = Array.from(new Set((users || []).map((u: any)=> String(u.team_id)).filter(Boolean)));
+          const teamIds = Array.from(new Set((users || []).map((u)=> String(u.team_id)).filter(Boolean)));
           const { data: teamsMeta } = teamIds.length ? await supabase
             .from('teams')
             .select('id, name')
-            .in('id', teamIds) : { data: [] } as any;
+            .in('id', teamIds) : { data: [] } as { data: Array<{ id: string; name: string }> };
           const teamNameById = new Map<string,string>();
-          (teamsMeta || []).forEach((t:any)=> teamNameById.set(String(t.id), String(t.name)));
+          (teamsMeta || []).forEach((t)=> teamNameById.set(String(t.id), String(t.name)));
 
-          const usersById = new Map((users || []).map((u:any)=> [String(u.id), u]));
+          const usersById = new Map((users || []).map((u)=> [String(u.id), u]));
           const playersAll: PlayerRow[] = rp.map(row => {
             const u = usersById.get(String(row.user_id));
             const teamName = u?.team_id ? (teamNameById.get(String(u.team_id)) || null) : null;

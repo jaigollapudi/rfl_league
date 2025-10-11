@@ -126,7 +126,7 @@ export default function RulesPage() {
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Clock className="w-4 h-4 text-rfl-light-blue" />
-              <span><strong>Workout Submission:</strong> Post your approved workout with screenshot in your Team's group by 11:49pm. Your captain/VC will send them all to Governors in provided format.</span>
+              <span><strong>Workout Submission:</strong> Post your approved workout with screenshot in your Team&apos;s group by 11:49pm. Your captain/VC will send them all to Governors in provided format.</span>
             </div>
             <div className="flex items-center gap-2">
               <Trophy className="w-4 h-4 text-yellow-500" />
@@ -150,7 +150,7 @@ export default function RulesPage() {
             </div>
             <div className="flex items-center gap-2">
               <Trophy className="w-4 h-4 text-green-500" />
-              <span><strong>Fair Play Award:</strong> "RFL FAIR PLAY" award to celebrate sportsmanship and trust in reporting and respect for RFL spirit!</span>
+              <span><strong>Fair Play Award:</strong> &quot;RFL FAIR PLAY&quot; award to celebrate sportsmanship and trust in reporting and respect for RFL spirit!</span>
             </div>
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-rfl-light-blue" />

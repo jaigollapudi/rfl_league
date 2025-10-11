@@ -76,7 +76,7 @@ export default function TeamPage() {
       .select('id, first_name')
       .eq('team_id', currentTeamId);
     const memberMap = new Map<string, MemberRow>();
-    (teamUsers || []).forEach((u: any) => {
+    (teamUsers || []).forEach((u: { id: string; first_name: string }) => {
       memberMap.set(String(u.id), {
         user_id: String(u.id),
         name: String(u.first_name || ''),
@@ -93,7 +93,7 @@ export default function TeamPage() {
       .eq('status', 'approved');
 
     const rrAgg = new Map<string, { sum: number; count: number }>();
-    (entries || []).forEach((e: any) => {
+    (entries || []).forEach((e: { user_id: string; rr_value: number | null; type: string }) => {
       const uid = String(e.user_id);
       const row = memberMap.get(uid);
       if (row) {

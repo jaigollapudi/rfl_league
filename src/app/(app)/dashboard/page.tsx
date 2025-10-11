@@ -243,8 +243,9 @@ export default function DashboardPage() {
         .select('team_id, teams(name)')
         .eq('id', userId)
         .maybeSingle();
-      const tId = (acct as unknown as { team_id?: string } | null)?.team_id || null;
-      const tName = ((acct as unknown as { teams?: { name?: string } } | null)?.teams?.name) || "";
+      type Acct = { team_id: string | null; teams?: { name?: string } | null } | null;
+      const tId = (acct as Acct)?.team_id || null;
+      const tName = (acct as Acct)?.teams?.name || "";
       setTeamId(tId);
       setTeamName(tName || "");
 
@@ -344,7 +345,7 @@ export default function DashboardPage() {
           .select('team_id')
           .eq('id', userId)
           .maybeSingle();
-        effectiveTeamId = (acct as any)?.team_id || null;
+        effectiveTeamId = ((acct as { team_id: string | null } | null)?.team_id) || null;
         if (effectiveTeamId) setTeamId(effectiveTeamId);
       }
       if (!effectiveTeamId) return;

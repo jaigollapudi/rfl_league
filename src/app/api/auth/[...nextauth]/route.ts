@@ -24,24 +24,24 @@ const authOptions = {
           .eq("last_name", lastName)
           .maybeSingle();
         if (!data) return null;
-        return { id: data.id, name: data.first_name, role: data.role } as any;
+        return { id: data.id, name: data.first_name, role: data.role } as { id: string; name: string; role: "player" | "leader" };
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.id = (user as any).id;
+        token.id = (user as { id: string }).id;
         token.name = user.name;
-        (token as any).role = (user as any).role;
+        (token as { role?: "player" | "leader" }).role = (user as { role: "player" | "leader" }).role;
       }
       return token;
     },
     async session({ session, token }) {
       session.user = {
-        id: String((token as any).id || ""),
+        id: String((token as { id?: string }).id || ""),
         name: String(token.name || ""),
-        role: (token as any).role || "player",
+        role: (token as { role?: "player" | "leader" }).role || "player",
       };
       return session;
     },
