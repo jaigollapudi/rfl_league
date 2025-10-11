@@ -24,11 +24,13 @@ const eslintConfig = [
 
 import next from '@next/eslint-plugin-next';
 
+// Use Next.js recommended (core-web-vitals) config in flat format, then relax two rules
 export default [
+  // Next plugin recommended rules
+  next.configs['core-web-vitals'],
+  // Project overrides
   {
-    plugins: { '@next/next': next },
     rules: {
-      '@next/next/core-web-vitals': 'warn',
       '@typescript-eslint/no-explicit-any': 'off',
       'react/no-unescaped-entities': 'off',
     },

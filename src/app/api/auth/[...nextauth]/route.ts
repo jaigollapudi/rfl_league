@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 
 const authOptions = {
   session: {
-    strategy: "jwt",
+    strategy: "jwt" as const,
   },
   providers: [
     Credentials({
