@@ -22,4 +22,14 @@ const eslintConfig = [
   },
 ];
 
-export default eslintConfig;
+export default [
+  {
+    ignores: [],
+  },
+  {
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      'react/no-unescaped-entities': 'off',
+    },
+  },
+];

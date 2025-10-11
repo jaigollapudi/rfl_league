@@ -29,7 +29,7 @@ const authOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }: { token: Record<string, unknown> & { id?: string; name?: string; role?: 'player' | 'leader' }; user?: { id: string; name: string; role: 'player' | 'leader' } }) {
       if (user) {
         token.id = (user as { id: string }).id;
         token.name = user.name;
@@ -37,7 +37,7 @@ const authOptions = {
       }
       return token;
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: { user?: { id: string; name: string; role: 'player' | 'leader' } }; token: Record<string, unknown> & { id?: string; name?: string; role?: 'player' | 'leader' } }) {
       session.user = {
         id: String((token as { id?: string }).id || ""),
         name: String(token.name || ""),
