@@ -8,7 +8,7 @@ import { signOut, useSession } from 'next-auth/react'
 import { useState } from 'react'
 
 const navItems = [
-  { href: '/', label: 'Dashboard', icon: Dumbbell },
+  { href: '/dashboard', label: 'Dashboard', icon: Dumbbell },
   { href: '/team', label: 'Team', icon: Users },
   { href: '/leaderboards', label: 'Leaderboards', icon: Trophy },
   { href: '/rules', label: 'Rules', icon: BookOpen },
@@ -26,7 +26,7 @@ export function Navbar() {
         <div className="flex justify-between items-center h-16">
           {/* RFL Logo/Brand */}
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
+            <Link href="/dashboard" className="flex items-center space-x-2">
               <div className="w-10 h-10 bg-rfl-light-blue rounded-lg flex items-center justify-center">
                 <Dumbbell className="w-6 h-6 text-white" />
               </div>
@@ -34,14 +34,16 @@ export function Navbar() {
                 <h1 className="text-lg font-bold">RFL</h1>
                 <p className="text-xs text-gray-300">Rotary Fitness League</p>
               </div>
-            </div>
+            </Link>
           </div>
 
           {/* Navigation Links (desktop) */}
           <div className="hidden md:flex items-center space-x-8">
             {navItems.map((item) => {
               const Icon = item.icon
-              const isActive = pathname === item.href
+              const isActive = item.href === '/dashboard'
+                ? (pathname === '/dashboard' || pathname === '/')
+                : pathname.startsWith(item.href)
               return (
                 <Link
                   key={item.href}
@@ -102,9 +104,11 @@ export function Navbar() {
               </button>
             </div>
             <div className="px-2 pt-2 pb-3 space-y-1">
-              {navItems.map((item) => {
+            {navItems.map((item) => {
                 const Icon = item.icon
-                const isActive = pathname === item.href
+              const isActive = item.href === '/dashboard'
+                ? (pathname === '/dashboard' || pathname === '/')
+                : pathname.startsWith(item.href)
                 return (
                   <Link
                     key={item.href}

@@ -530,7 +530,7 @@ export default function DashboardPage() {
                   <div className="text-xs text-gray-600 space-y-1">
                     <div className="font-semibold text-rfl-navy">This Week:</div>
                     <div>Points: <span className="font-semibold text-rfl-coral">{rows.reduce((a,r)=>a+(r.points||0),0)}</span></div>
-                    <div>Avg RR: <span className="font-semibold text-rfl-navy">{(() => { const rr = rows.map(r=>r.rr_value||0).filter(v=>v>0); return rr.length ? (Math.round((rr.reduce((a,b)=>a+b,0)/rr.length)*100)/100) : 0; })()}</span></div>
+                    <div>Avg RR: <span className="font-semibold text-rfl-navy">{(() => { const rr = rows.map(r=>r.rr_value||0).filter(v=>v>0); return rr.length ? (Math.round((rr.reduce((a,b)=>a+b,0)/rr.length)*100)/100).toFixed(2) : '0.00'; })()}</span></div>
                   </div>
                 </div>
               </div>
@@ -551,7 +551,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="p-3 bg-rfl-peach/50 rounded">
                     <div className="text-xs text-gray-600">Avg RR</div>
-                    <div className="text-lg font-bold text-rfl-navy">{teamAvgRR ?? '—'}</div>
+                    <div className="text-lg font-bold text-rfl-navy">{teamAvgRR !== null ? Number(teamAvgRR).toFixed(2) : '—'}</div>
                   </div>
                   <div className="p-3 bg-rfl-peach/50 rounded">
                     <div className="text-xs text-gray-600">Your week points</div>

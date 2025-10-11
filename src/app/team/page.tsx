@@ -160,7 +160,7 @@ export default function TeamPage() {
     const pts = members.reduce((a, m) => a + (m.approved_points || 0), 0);
     const rrVals = members.map(m => m.avg_rr).filter((v): v is number => typeof v === 'number');
     const rr = rrVals.length ? (rrVals.reduce((a,b)=>a+b,0)/rrVals.length) : 0;
-    return { pts, rr: Math.round(rr * 100) / 100 };
+    return { pts, rr: Number((Math.round(rr * 100) / 100).toFixed(2)) };
   }, [members]);
 
   return (
@@ -229,35 +229,53 @@ export default function TeamPage() {
                   <CardTitle className="text-xl text-rfl-navy">Pending approvals</CardTitle>
                   <CardDescription>Approve or reject all pending entries</CardDescription>
                 </div>
-                <div className="px-3 py-1 text-xs font-semibold rounded-full border bg-white">Pending: {pendingCount}</div>
+                <div className="px-3 py-1 text-xs font-semibold rounded-full border bg-white whitespace-nowrap">Pending: {pendingCount}</div>
               </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
                 {pending.map((e) => (
-                  <div key={e.id} className="p-3 border rounded flex items-center justify-between">
-                    <div>
-                      <div className="font-medium text-rfl-navy">{e.accounts.first_name} — {formatLocalDateLabel(e.date)}</div>
-                      <div className="text-sm text-gray-600">
-                        {e.type === 'rest' ? 'Rest Day' : `${e.workout_type || ''}`}
-                        {e.duration ? ` • ${e.duration}m` : ''}
-                        {e.distance ? ` • ${e.distance}km` : ''}
-                        {e.steps ? ` • ${e.steps} steps` : ''}
-                        {e.holes ? ` • ${e.holes} holes` : ''}
-                        {e.rr_value ? ` • RR ${e.rr_value}` : ''}
+                  <div key={e.id} className="p-3 border rounded">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-medium text-rfl-navy truncate">{e.accounts.first_name} — {formatLocalDateLabel(e.date)}</div>
+                        <div className="text-sm text-gray-600">
+                          {e.type === 'rest' ? 'Rest Day' : `${e.workout_type || ''}`}
+                          {e.duration ? ` • ${e.duration}m` : ''}
+                          {e.distance ? ` • ${e.distance}km` : ''}
+                          {e.steps ? ` • ${e.steps} steps` : ''}
+                          {e.holes ? ` • ${e.holes} holes` : ''}
+                          {typeof e.rr_value === 'number' ? ` • RR ${Number(e.rr_value).toFixed(2)}` : ''}
+                        </div>
+                      </div>
+                      {/* Desktop action group */}
+                      <div className="hidden sm:flex shrink-0 gap-2">
+                        {e.proof_url && (
+                          <button className="px-3 py-1 rounded border text-blue-700 border-blue-300 hover:bg-blue-50" onClick={()=> setPreviewUrl(e.proof_url!)}>View</button>
+                        )}
+                        <button className="px-3 py-1 rounded border text-green-700 border-green-300 hover:bg-green-50" onClick={async()=>{
+                          await getSupabase().from('entries').update({ status: 'approved' }).eq('id', e.id);
+                          setPending(p=>p.filter(x=>x.id!==e.id));
+                          if (teamId) { await loadMembersSummary(teamId); await loadPending(teamId, page); }
+                        }}>Approve</button>
+                        <button className="px-3 py-1 rounded border text-red-700 border-red-300 hover:bg-red-50" onClick={async()=>{
+                          await getSupabase().from('entries').update({ status: 'rejected' }).eq('id', e.id);
+                          setPending(p=>p.filter(x=>x.id!==e.id));
+                          if (teamId) { await loadMembersSummary(teamId); await loadPending(teamId, page); }
+                        }}>Reject</button>
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    {/* Mobile action row */}
+                    <div className="mt-2 flex sm:hidden gap-2">
                       {e.proof_url && (
-                        <button className="px-3 py-1 rounded border text-blue-700 border-blue-300 hover:bg-blue-50" onClick={()=> setPreviewUrl(e.proof_url!)}>View</button>
+                        <button className="flex-1 py-2 rounded border text-blue-700 border-blue-300 hover:bg-blue-50" onClick={()=> setPreviewUrl(e.proof_url!)}>View</button>
                       )}
-                      <button className="px-3 py-1 rounded border text-green-700 border-green-300 hover:bg-green-50" onClick={async()=>{
+                      <button className="flex-1 py-2 rounded border text-green-700 border-green-300 hover:bg-green-50" onClick={async()=>{
                         await getSupabase().from('entries').update({ status: 'approved' }).eq('id', e.id);
                         setPending(p=>p.filter(x=>x.id!==e.id));
-                        // refresh counts if needed
                         if (teamId) { await loadMembersSummary(teamId); await loadPending(teamId, page); }
                       }}>Approve</button>
-                      <button className="px-3 py-1 rounded border text-red-700 border-red-300 hover:bg-red-50" onClick={async()=>{
+                      <button className="flex-1 py-2 rounded border text-red-700 border-red-300 hover:bg-red-50" onClick={async()=>{
                         await getSupabase().from('entries').update({ status: 'rejected' }).eq('id', e.id);
                         setPending(p=>p.filter(x=>x.id!==e.id));
                         if (teamId) { await loadMembersSummary(teamId); await loadPending(teamId, page); }
