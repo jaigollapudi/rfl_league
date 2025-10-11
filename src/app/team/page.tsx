@@ -59,20 +59,19 @@ export default function TeamPage() {
   const [page, setPage] = useState<number>(1);
   const pageSize = 10;
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const supabase = getSupabase();
 
   // discover the user's team
   useEffect(() => {
     if (!userId) return;
     (async () => {
-      const { data } = await supabase.from('accounts').select('team_id').eq('id', userId).maybeSingle();
+      const { data } = await getSupabase().from('accounts').select('team_id').eq('id', userId).maybeSingle();
       setTeamId(data?.team_id ?? null);
     })();
   }, [userId]);
 
   async function loadMembersSummary(currentTeamId: string) {
     // Fetch team members
-    const { data: teamUsers } = await supabase
+    const { data: teamUsers } = await getSupabase()
       .from('accounts')
       .select('id, first_name')
       .eq('team_id', currentTeamId);
@@ -87,7 +86,7 @@ export default function TeamPage() {
     });
 
     // Fetch ALL approved entries for team (no date filter)
-    const { data: entries } = await supabase
+    const { data: entries } = await getSupabase()
       .from('entries')
       .select('user_id, rr_value, type')
       .eq('team_id', currentTeamId)
@@ -126,7 +125,7 @@ export default function TeamPage() {
     const from = (pageNum - 1) * pageSize;
     const to = from + pageSize - 1;
     // total count
-    const { count } = await supabase
+    const { count } = await getSupabase()
       .from('entries')
       .select('id', { count: 'exact', head: true })
       .eq('team_id', currentTeamId)
@@ -134,7 +133,7 @@ export default function TeamPage() {
     setPendingCount(count || 0);
 
     // page data
-    const { data: pend } = await supabase
+    const { data: pend } = await getSupabase()
       .from('entries')
       .select('id,user_id,date,type,workout_type,duration,distance,steps,holes,rr_value,status,proof_url,accounts!inner(first_name)')
       .eq('team_id', currentTeamId)
@@ -253,13 +252,13 @@ export default function TeamPage() {
                         <button className="px-3 py-1 rounded border text-blue-700 border-blue-300 hover:bg-blue-50" onClick={()=> setPreviewUrl(e.proof_url!)}>View</button>
                       )}
                       <button className="px-3 py-1 rounded border text-green-700 border-green-300 hover:bg-green-50" onClick={async()=>{
-                        await supabase.from('entries').update({ status: 'approved' }).eq('id', e.id);
+                        await getSupabase().from('entries').update({ status: 'approved' }).eq('id', e.id);
                         setPending(p=>p.filter(x=>x.id!==e.id));
                         // refresh counts if needed
                         if (teamId) { await loadMembersSummary(teamId); await loadPending(teamId, page); }
                       }}>Approve</button>
                       <button className="px-3 py-1 rounded border text-red-700 border-red-300 hover:bg-red-50" onClick={async()=>{
-                        await supabase.from('entries').update({ status: 'rejected' }).eq('id', e.id);
+                        await getSupabase().from('entries').update({ status: 'rejected' }).eq('id', e.id);
                         setPending(p=>p.filter(x=>x.id!==e.id));
                         if (teamId) { await loadMembersSummary(teamId); await loadPending(teamId, page); }
                       }}>Reject</button>
@@ -309,14 +308,14 @@ export default function TeamPage() {
               <button className="px-4 py-2 rounded bg-rfl-coral text-white" onClick={async()=>{
                 if (!teamId) return;
                 // Approve ALL pending for the team (not just the page)
-                const { data: allIds } = await supabase
+                const { data: allIds } = await getSupabase()
                   .from('entries')
                   .select('id')
                   .eq('team_id', teamId)
                   .eq('status','pending');
                 const ids = (allIds || []).map((x:any)=>x.id);
                 if (ids.length) {
-                  await supabase.from('entries').update({ status: 'approved' }).in('id', ids);
+                  await getSupabase().from('entries').update({ status: 'approved' }).in('id', ids);
                 }
                 await loadMembersSummary(teamId);
                 await loadPending(teamId, page);
