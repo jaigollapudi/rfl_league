@@ -48,7 +48,7 @@ const authConfig = {
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user }: { token: any; user?: any }) {
       if (user) {
         token.id = (user as unknown as { id: string }).id;
         token.name = user.name;
@@ -56,7 +56,7 @@ const authConfig = {
       }
       return token;
     },
-    async session({ session, token }) {
+    async session({ session, token }: { session: any; token: any }) {
       session.user = {
         id: String(token.id || ""),
         name: String(token.name || ""),
