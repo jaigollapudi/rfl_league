@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Dumbbell, Trophy, Users, BookOpen, User, Menu } from 'lucide-react'
+import { Dumbbell, Trophy, Users, BookOpen, User, Menu, X } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
 import { useState } from 'react'
 
@@ -65,13 +65,16 @@ export function Navbar() {
               <User className="w-5 h-5" />
               <span className="text-sm">{name ?? 'Guest'}</span>
             </div>
-            {name ? (
-              <Button onClick={() => signOut({ callbackUrl: '/' })} variant="outline" size="sm" className="text-rfl-navy border-white hover:bg-white hover:text-rfl-navy">
-                Sign Out
-              </Button>
-            ) : (
-              <Link href="/signin" className="text-sm underline">Sign In</Link>
-            )}
+            {/* Desktop-only auth action */}
+            <div className="hidden md:block">
+              {name ? (
+                <Button onClick={() => signOut({ callbackUrl: '/' })} variant="outline" size="sm" className="text-rfl-navy border-white hover:bg-white hover:text-rfl-navy">
+                  Sign Out
+                </Button>
+              ) : (
+                <Link href="/signin" className="text-sm underline">Sign In</Link>
+              )}
+            </div>
             {/* Hamburger toggle (mobile only) */}
             <button
               className="md:hidden p-2 rounded hover:bg-rfl-light-blue/30"
@@ -84,29 +87,55 @@ export function Navbar() {
         </div>
       </div>
 
-      {/* Mobile menu (toggle) */}
+      {/* Mobile overlay drawer */}
       {mobileOpen && (
-        <div className="md:hidden">
-          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-            {navItems.map((item) => {
-              const Icon = item.icon
-              const isActive = pathname === item.href
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium transition-colors ${
-                    isActive
-                      ? 'bg-rfl-coral text-white'
-                      : 'text-gray-300 hover:text-white hover:bg-rfl-light-blue'
-                  }`}
-                  onClick={() => setMobileOpen(false)}
+        <div className="md:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
+          <div className="absolute right-0 top-0 h-full w-64 bg-rfl-navy text-white shadow-xl">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+              <div className="flex items-center gap-2">
+                <User className="w-5 h-5" />
+                <span className="text-sm">{name ?? 'Guest'}</span>
+              </div>
+              <button className="p-2 rounded hover:bg-rfl-light-blue/30" aria-label="Close menu" onClick={() => setMobileOpen(false)}>
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="px-2 pt-2 pb-3 space-y-1">
+              {navItems.map((item) => {
+                const Icon = item.icon
+                const isActive = pathname === item.href
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium transition-colors ${
+                      isActive
+                        ? 'bg-rfl-coral text-white'
+                        : 'text-gray-300 hover:text-white hover:bg-rfl-light-blue'
+                    }`}
+                    onClick={() => setMobileOpen(false)}
+                  >
+                    <Icon className="w-5 h-5" />
+                    <span>{item.label}</span>
+                  </Link>
+                )
+              })}
+            </div>
+            <div className="mt-auto px-4 py-3 border-t border-white/10">
+              {name ? (
+                <button
+                  className="w-full text-left px-3 py-2 rounded-md bg-white text-rfl-navy font-medium"
+                  onClick={() => { setMobileOpen(false); signOut({ callbackUrl: '/' }) }}
                 >
-                  <Icon className="w-5 h-5" />
-                  <span>{item.label}</span>
+                  Sign Out
+                </button>
+              ) : (
+                <Link href="/signin" className="block px-3 py-2 rounded-md bg-white text-rfl-navy font-medium" onClick={() => setMobileOpen(false)}>
+                  Sign In
                 </Link>
-              )
-            })}
+              )}
+            </div>
           </div>
         </div>
       )}
