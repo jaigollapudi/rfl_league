@@ -22,12 +22,13 @@ const eslintConfig = [
   },
 ];
 
+import next from '@next/eslint-plugin-next';
+
 export default [
   {
-    ignores: [],
-  },
-  {
+    plugins: { '@next/next': next },
     rules: {
+      '@next/next/core-web-vitals': 'warn',
       '@typescript-eslint/no-explicit-any': 'off',
       'react/no-unescaped-entities': 'off',
     },
