@@ -140,7 +140,11 @@ export default function TeamPage() {
       .eq('status','pending')
       .order('date', { ascending: false })
       .range(from, to);
-    setPending((pend as PendingEntry[]) || []);
+    const normalized = (pend || []).map((e: any) => ({
+      ...e,
+      accounts: Array.isArray(e.accounts) ? (e.accounts[0] || { first_name: '' }) : e.accounts,
+    })) as PendingEntry[];
+    setPending(normalized || []);
   }
 
   useEffect(() => {
