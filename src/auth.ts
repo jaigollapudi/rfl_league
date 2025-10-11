@@ -1,6 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 
 declare module "next-auth" {
   interface Session {
@@ -29,7 +29,7 @@ const authConfig = {
 
         if (!firstName || !lastName) return null;
 
-        const { data, error } = await supabase
+        const { data, error } = await getSupabase()
           .from("accounts")
           .select("id, first_name, last_name, role")
           .eq("first_name", firstName)

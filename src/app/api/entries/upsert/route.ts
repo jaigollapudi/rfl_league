@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import { auth } from "@/auth";
 
 export async function POST(req: NextRequest) {
@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   const { date, type, workout_type, duration, distance, steps, holes, team_id } = body;
 
   // check existing entry
-  const { data: existing } = await supabase
+  const { data: existing } = await getSupabase()
     .from("entries")
     .select("id")
     .eq("user_id", session.user.id)
@@ -50,12 +50,12 @@ export async function POST(req: NextRequest) {
   else payload.rr_value = 1.0;
 
   if (existing) {
-    const { error } = await supabase.from("entries").update(payload).eq("id", existing.id);
+    const { error } = await getSupabase().from("entries").update(payload).eq("id", existing.id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true, updated: true });
   }
 
-  const { error } = await supabase.from("entries").insert(payload);
+  const { error } = await getSupabase().from("entries").insert(payload);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ ok: true, created: true });
 }

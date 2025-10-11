@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 
 type TeamRow = { team_id: string; team_name: string; points: number; avg_rr: number | null };
 type PlayerRow = { user_id: string; name: string; team: string | null; points: number; avg_rr: number | null };
@@ -19,8 +19,8 @@ export default function LeaderboardsPage() {
       const fetchLeaderboards = async () => {
         // Call RPCs with no params; both return aggregated rows
         const [{ data: t, error: teamError }, { data: p, error: playerError }] = await Promise.all([
-          supabase.rpc('rfl_team_leaderboard'),
-          supabase.rpc('rfl_individual_leaderboard'),
+          getSupabase().rpc('rfl_team_leaderboard'),
+          getSupabase().rpc('rfl_individual_leaderboard'),
         ]);
 
         // Teams: RPC already returns team_id, team_name, points, avg_rr
@@ -37,13 +37,13 @@ export default function LeaderboardsPage() {
           const rp = (p || []) as Array<{ user_id: string; points: number; avg_rr: number | null }>;
           const userIds = rp.map(r => r.user_id);
 
-          const { data: users } = userIds.length ? await supabase
+          const { data: users } = userIds.length ? await getSupabase()
             .from('accounts')
             .select('id, first_name, team_id')
             .in('id', userIds) : { data: [] } as { data: Array<{ id: string; first_name: string; team_id: string | null }> };
 
           const teamIds = Array.from(new Set((users || []).map((u)=> String(u.team_id)).filter(Boolean)));
-          const { data: teamsMeta } = teamIds.length ? await supabase
+          const { data: teamsMeta } = teamIds.length ? await getSupabase()
             .from('teams')
             .select('id, name')
             .in('id', teamIds) : { data: [] } as { data: Array<{ id: string; name: string }> };

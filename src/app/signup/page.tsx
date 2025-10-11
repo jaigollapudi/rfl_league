@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import { signIn } from "next-auth/react";
 
 interface Team {
@@ -22,7 +22,7 @@ export default function SignUpPage() {
   useEffect(() => {
     // Fetch teams from Supabase
     const fetchTeams = async () => {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()
         .from("teams")
         .select("id, name")
         .order("name");
@@ -49,7 +49,7 @@ export default function SignUpPage() {
     e.preventDefault();
     setError(null);
 
-    const { data: existing } = await supabase
+    const { data: existing } = await getSupabase()
       .from("accounts")
       .select("id")
       .eq("first_name", firstName)
@@ -59,7 +59,7 @@ export default function SignUpPage() {
       return;
     }
 
-    const { error: insertError } = await supabase
+    const { error: insertError } = await getSupabase()
       .from("accounts")
       .insert({ first_name: firstName, last_name: lastName, role, team_id: teamId || null });
 

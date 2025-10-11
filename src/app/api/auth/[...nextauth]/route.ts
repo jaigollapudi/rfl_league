@@ -1,6 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 
 const authOptions = {
   session: {
@@ -17,7 +17,7 @@ const authOptions = {
         const firstName = (credentials?.firstName || "").trim();
         const lastName = (credentials?.lastName || "").trim();
         if (!firstName || !lastName) return null;
-        const { data } = await supabase
+        const { data } = await getSupabase()
           .from("accounts")
           .select("id, first_name, role")
           .eq("first_name", firstName)

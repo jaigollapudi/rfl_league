@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import TeamProgressChart from "./TeamProgressChart";
 
 type ActivityRow = {
@@ -202,7 +202,7 @@ export default function DashboardPage() {
     const ws = weekStart || viewWeekStart;
     const we = new Date(ws);
     we.setUTCDate(ws.getUTCDate() + 6);
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from('entries')
       .select('date,type,workout_type,duration,distance,steps,holes,status,rr_value')
       .eq('user_id', userId)
@@ -238,7 +238,7 @@ export default function DashboardPage() {
     (async () => {
       if (!userId) return;
       // Fetch user's team id and name
-      const { data: acct } = await supabase
+      const { data: acct } = await getSupabase()
         .from('accounts')
         .select('team_id, teams(name)')
         .eq('id', userId)
@@ -250,7 +250,7 @@ export default function DashboardPage() {
       setTeamName(tName || "");
 
       // Fetch rest day count
-      const { count } = await supabase
+      const { count } = await getSupabase()
         .from('entries')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId)
@@ -259,7 +259,7 @@ export default function DashboardPage() {
       setRestUsed(count || 0);
 
       // Fetch leaderboard to compute team position (overall)
-      const { data: leaderboard } = await supabase.rpc('rfl_team_leaderboard');
+      const { data: leaderboard } = await getSupabase().rpc('rfl_team_leaderboard');
       const rowsAny = (leaderboard as unknown as Array<Record<string, unknown>>) || [];
       // Try to derive rank by points desc, rr desc if not present
       const getNum = (v: unknown): number => (typeof v === 'number' ? v : Number(v) || 0);
@@ -306,7 +306,7 @@ export default function DashboardPage() {
     (async () => {
       let effectiveTeamId = teamId;
       if (!effectiveTeamId && userId) {
-        const { data: acct } = await supabase
+        const { data: acct } = await getSupabase()
           .from('accounts')
           .select('team_id')
           .eq('id', userId)
@@ -317,7 +317,7 @@ export default function DashboardPage() {
       if (!effectiveTeamId) return;
       const ws = viewWeekStart;
       const we = new Date(ws); we.setUTCDate(ws.getUTCDate() + 6);
-      const { data } = await supabase
+      const { data } = await getSupabase()
         .from('entries')
         .select('id, rr_value')
         .eq('team_id', effectiveTeamId)
@@ -340,7 +340,7 @@ export default function DashboardPage() {
       if (!userId) return;
       let effectiveTeamId = teamId;
       if (!effectiveTeamId) {
-        const { data: acct } = await supabase
+        const { data: acct } = await getSupabase()
           .from('accounts')
           .select('team_id')
           .eq('id', userId)
@@ -352,7 +352,7 @@ export default function DashboardPage() {
 
       const start = firstWeekStart(new Date().getUTCFullYear());
       const today = new Date();
-      const { data } = await supabase
+      const { data } = await getSupabase()
         .from('entries')
         .select('date, rr_value')
         .eq('team_id', effectiveTeamId)
@@ -420,7 +420,7 @@ export default function DashboardPage() {
       return;
     }
 
-    const { data: hasExisting } = await supabase.rpc("rfl_has_entry_on_date", {
+      const { data: hasExisting } = await getSupabase().rpc("rfl_has_entry_on_date", {
       p_user_id: userId,
       p_date: date,
     });
@@ -434,15 +434,15 @@ export default function DashboardPage() {
       // 1) Upload proof image to Supabase Storage
       const safeName = proofFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
       const filePath = `${userId}/${date}/${Date.now()}-${safeName}`;
-      const { error: uploadErr } = await supabase.storage.from(PROOF_BUCKET).upload(filePath, proofFile, {
+      const { error: uploadErr } = await getSupabase().storage.from(PROOF_BUCKET).upload(filePath, proofFile, {
         cacheControl: '3600', upsert: true, contentType: proofFile.type || 'image/jpeg'
       });
       if (uploadErr) { setProofError('Upload failed, please try again.'); throw uploadErr; }
-      const { data: pub } = supabase.storage.from(PROOF_BUCKET).getPublicUrl(filePath);
+      const { data: pub } = getSupabase().storage.from(PROOF_BUCKET).getPublicUrl(filePath);
       const proofUrl = pub?.publicUrl || null;
 
       // 2) Save workout entry with proof URL as pending for leader approval
-      await supabase.rpc("rfl_upsert_workout", {
+      await getSupabase().rpc("rfl_upsert_workout", {
         p_user_id: userId,
         p_date: date,
         p_workout_type: activity,
@@ -467,14 +467,14 @@ export default function DashboardPage() {
   async function onSaveRest() {
     if (!userId) return;
     if (date > todayStr()) { alert('Future dates are not allowed.'); return; }
-    const { data: hasExisting } = await supabase.rpc('rfl_has_entry_on_date', { p_user_id: userId, p_date: date });
+      const { data: hasExisting } = await getSupabase().rpc('rfl_has_entry_on_date', { p_user_id: userId, p_date: date });
     if (hasExisting) { const ok = window.confirm('You already have a log for this day. Overwrite it?'); if (!ok) return; }
     setLoading(true);
     try {
-      await supabase.rpc('rfl_upsert_rest_day', { p_user_id: userId, p_date: date, p_team_id: null, p_status: 'approved' });
+      await getSupabase().rpc('rfl_upsert_rest_day', { p_user_id: userId, p_date: date, p_team_id: null, p_status: 'approved' });
       setOpenRest(false);
       await fetchActivity(viewWeekStart);
-      const { count } = await supabase.from('entries').select('id', { count: 'exact', head: true })
+      const { count } = await getSupabase().from('entries').select('id', { count: 'exact', head: true })
         .eq('user_id', userId).eq('type','rest').eq('status','approved');
       setRestUsed(count || 0);
     } finally { setLoading(false); }
