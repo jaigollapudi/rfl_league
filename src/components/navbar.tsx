@@ -3,8 +3,9 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Dumbbell, Trophy, Users, BookOpen, User } from 'lucide-react'
+import { Dumbbell, Trophy, Users, BookOpen, User, Menu } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
+import { useState } from 'react'
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: Dumbbell },
@@ -17,6 +18,7 @@ export function Navbar() {
   const pathname = usePathname()
   const { data: session } = useSession()
   const name = session?.user?.name ?? null
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
     <nav className="bg-rfl-navy text-white shadow-lg">
@@ -35,7 +37,7 @@ export function Navbar() {
             </div>
           </div>
 
-          {/* Navigation Links */}
+          {/* Navigation Links (desktop) */}
           <div className="hidden md:flex items-center space-x-8">
             {navItems.map((item) => {
               const Icon = item.icon
@@ -57,7 +59,7 @@ export function Navbar() {
             })}
           </div>
 
-          {/* User Menu */}
+          {/* User Menu + Mobile toggle */}
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <User className="w-5 h-5" />
@@ -70,33 +72,44 @@ export function Navbar() {
             ) : (
               <Link href="/signin" className="text-sm underline">Sign In</Link>
             )}
+            {/* Hamburger toggle (mobile only) */}
+            <button
+              className="md:hidden p-2 rounded hover:bg-rfl-light-blue/30"
+              aria-label="Toggle navigation menu"
+              onClick={() => setMobileOpen((v) => !v)}
+            >
+              <Menu className="w-6 h-6" />
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Mobile menu */}
-      <div className="md:hidden">
-        <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            const isActive = pathname === item.href
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium transition-colors ${
-                  isActive
-                    ? 'bg-rfl-coral text-white'
-                    : 'text-gray-300 hover:text-white hover:bg-rfl-light-blue'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                <span>{item.label}</span>
-              </Link>
-            )
-          })}
+      {/* Mobile menu (toggle) */}
+      {mobileOpen && (
+        <div className="md:hidden">
+          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const isActive = pathname === item.href
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium transition-colors ${
+                    isActive
+                      ? 'bg-rfl-coral text-white'
+                      : 'text-gray-300 hover:text-white hover:bg-rfl-light-blue'
+                  }`}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <Icon className="w-5 h-5" />
+                  <span>{item.label}</span>
+                </Link>
+              )
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </nav>
   )
 }
