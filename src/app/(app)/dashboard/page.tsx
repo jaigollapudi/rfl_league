@@ -145,6 +145,8 @@ export default function DashboardPage() {
   const [teamPosition, setTeamPosition] = useState<number | null>(null);
   const [chartDates, setChartDates] = useState<string[]>([]);
   const [weekRestDays, setWeekRestDays] = useState<number>(0);
+  const [teamMissedWeek, setTeamMissedWeek] = useState<number>(0);
+  const [teamRestWeek, setTeamRestWeek] = useState<number>(0);
   const [viewWeekStart, setViewWeekStart] = useState<Date>(() => {
     const now = new Date();
     const y = now.getUTCFullYear();
@@ -321,19 +323,39 @@ export default function DashboardPage() {
       if (!effectiveTeamId) return;
       const ws = viewWeekStart;
       const we = new Date(ws); we.setUTCDate(ws.getUTCDate() + 6);
+      // Fetch team members
+      const { data: teamUsers } = await getSupabase()
+        .from('accounts')
+        .select('id')
+        .eq('team_id', effectiveTeamId);
+      const memberIds = ((teamUsers || []) as Array<{ id: string }>).map((u)=> String(u.id));
+      // Fetch all approved entries for the team for this week
       const { data } = await getSupabase()
         .from('entries')
-        .select('id, rr_value')
+        .select('id, user_id, date, type, rr_value')
         .eq('team_id', effectiveTeamId)
         .eq('status', 'approved')
         .gte('date', formatDateYYYYMMDD(ws))
         .lte('date', formatDateYYYYMMDD(we));
-      const entries = (data || []) as Array<{ id: string; rr_value: number | null }>;
+      const entries = (data || []) as Array<{ id: string; user_id: string; date: string; type: string | null; rr_value: number | null }>;
       const teamPts = entries.length; // every approved entry counts 1
       const rrVals = entries.map(e => (typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0))).filter(v => v > 0);
       const teamRR = rrVals.length ? Math.round((rrVals.reduce((a,b)=>a+b,0)/rrVals.length)*100)/100 : null;
+      // Team rest days (approved)
+      const restWeek = entries.filter(e => String(e.type) === 'rest').length;
+      // Team missed days: per member per day with no entry
+      const memberSet = new Set(memberIds);
+      const byDateUser = new Set(entries.map(e => `${String(e.date)}|${String(e.user_id)}`));
+      let missed = 0;
+      for (let i=0;i<7;i++) {
+        const day = new Date(ws); day.setUTCDate(ws.getUTCDate()+i);
+        const ds = formatDateYYYYMMDD(day);
+        memberSet.forEach((uid)=>{ if (!byDateUser.has(`${ds}|${uid}`)) missed += 1; });
+      }
       setTeamPoints(teamPts);
       setTeamAvgRR(teamRR);
+      setTeamRestWeek(restWeek);
+      setTeamMissedWeek(missed);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId, viewWeekStart, userId]);
@@ -490,7 +512,7 @@ export default function DashboardPage() {
                     <div className="text-xs px-2 py-0.5 rounded-full bg-rfl-coral text-white">Position #{teamPosition}</div>
                   ) : null}
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-center">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                   <div className="p-3 bg-rfl-peach/50 rounded">
                     <div className="text-xs text-gray-600">Points (week)</div>
                     <div className="text-lg font-bold text-rfl-coral">{teamPoints ?? '—'}</div>
@@ -498,6 +520,14 @@ export default function DashboardPage() {
                   <div className="p-3 bg-rfl-peach/50 rounded">
                     <div className="text-xs text-gray-600">Avg RR</div>
                     <div className="text-lg font-bold text-rfl-navy">{teamAvgRR !== null ? Number(teamAvgRR).toFixed(2) : '—'}</div>
+                  </div>
+                  <div className="p-3 bg-rfl-peach/50 rounded">
+                    <div className="text-xs text-gray-600">Missed days (week)</div>
+                    <div className="text-lg font-bold text-rfl-navy">{teamMissedWeek}</div>
+                  </div>
+                  <div className="p-3 bg-rfl-peach/50 rounded">
+                    <div className="text-xs text-gray-600">Rest days (week)</div>
+                    <div className="text-lg font-bold text-rfl-navy">{teamRestWeek}</div>
                   </div>
                 </div>
                 {/* League standings moved to /leaderboards page */}
