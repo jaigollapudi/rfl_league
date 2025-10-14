@@ -28,12 +28,14 @@ export default function LeagueStandings({ teams }: Props) {
   }, []);
 
   const width = 720; // keep within view; we'll reclaim space by moving labels inside bars
-  const rowH = isSmall ? 42 : 34; // slightly taller rows on phones
-  const paddingTop = 18;
-  const paddingBottom = 16;
+  // Vertically elongate chart: larger row height on all devices
+  const rowH = isSmall ? 60 : 48;
+  const paddingTop = 22;
+  const paddingBottom = 20;
   const paddingLeft = 16; // reclaim left margin by placing names inside bars
   const paddingRight = 16; // tighter since labels moved to tooltip
   const height = paddingTop + paddingBottom + rowH * Math.max(1, teams.length);
+  const scale = rowH / 34; // baseline row height was 34
 
   const maxPts = Math.max(1, ...teams.map(t => t.points));
   const x = (v: number) => paddingLeft + (v / maxPts) * (width - paddingLeft - paddingRight);
@@ -50,8 +52,8 @@ export default function LeagueStandings({ teams }: Props) {
           const gx = paddingLeft + p * (width - paddingLeft - paddingRight);
           return (
             <g key={i}>
-              <line x1={gx} y1={paddingTop - 6} x2={gx} y2={height - paddingBottom} stroke="#e5e7eb" />
-              <text x={gx} y={height - 2} fontSize={isSmall ? 12 : 10} fill="#6b7280" textAnchor="middle">{Math.round(p * maxPts)}</text>
+              <line x1={gx} y1={paddingTop - 6 * scale} x2={gx} y2={height - paddingBottom} stroke="#e5e7eb" />
+              <text x={gx} y={height - 2} fontSize={Math.round(10 * scale)} fill="#6b7280" textAnchor="middle">{Math.round(p * maxPts)}</text>
             </g>
           );
         })}
@@ -70,12 +72,12 @@ export default function LeagueStandings({ teams }: Props) {
               <rect x={paddingLeft} y={y + 8} width={barW} height={rowH - 16} fill={palette} rx={4} />
               {/* Team name inside bar if space allows, otherwise just outside the bar */}
               {barW > 90 ? (
-                <text x={paddingLeft + 8} y={y + rowH / 2} fontSize={isSmall ? 13 : 12} fill="#ffffff" fontWeight={600} dominantBaseline="middle">{t.teamName}</text>
+                <text x={paddingLeft + 8} y={y + rowH / 2} fontSize={Math.round(12 * scale)} fill="#ffffff" fontWeight={600} dominantBaseline="middle">{t.teamName}</text>
               ) : (
-                <text x={paddingLeft + barW + 6} y={y + rowH / 2} fontSize={isSmall ? 13 : 12} fill="#0f172a" dominantBaseline="middle">{t.teamName}</text>
+                <text x={paddingLeft + barW + 6} y={y + rowH / 2} fontSize={Math.round(12 * scale)} fill="#0f172a" dominantBaseline="middle">{t.teamName}</text>
               )}
               {/* Value label on bar (right end) */}
-              <text x={paddingLeft + barW - 6} y={y + rowH / 2} fontSize={isSmall ? 13 : 12} fill="#fff" textAnchor="end" fontWeight={700} dominantBaseline="middle">{t.points}</text>
+              <text x={paddingLeft + barW - 6} y={y + rowH / 2} fontSize={Math.round(12 * scale)} fill="#fff" textAnchor="end" fontWeight={700} dominantBaseline="middle">{t.points}</text>
             </g>
           );
         })}
