@@ -225,27 +225,29 @@ export default function TeamPage() {
         <CardContent>
           <div className="space-y-2">
             {members.map((m, idx) => (
-              <div key={m.user_id} className="flex items-center justify-between p-3 border rounded">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-rfl-navy text-white flex items-center justify-center font-semibold">{idx+1}</div>
-                  <div className="font-medium text-rfl-navy">{m.name}</div>
-                </div>
-                <div className="flex items-center gap-6 text-sm">
-                  <div className="text-center">
-                    <div className="font-semibold text-rfl-coral">{m.approved_points ?? 0}</div>
-                    <div className="text-gray-600">points</div>
+              <div key={m.user_id} className="p-3 border rounded">
+                <div className="flex sm:flex-row flex-col sm:items-center sm:justify-between gap-2">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-rfl-navy text-white flex items-center justify-center font-semibold">{idx+1}</div>
+                    <div className="font-medium text-rfl-navy">{m.name}</div>
                   </div>
-                  <div className="text-center">
-                    <div className="font-semibold text-rfl-navy">{typeof m.avg_rr === 'number' ? m.avg_rr : '-'}</div>
-                    <div className="text-gray-600">RR</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-semibold text-rfl-coral">{m.rest_used ?? 0}</div>
-                    <div className="text-gray-600">rest</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="font-semibold text-rfl-navy">{m.missed_days ?? 0}</div>
-                    <div className="text-gray-600">missed</div>
+                  <div className="grid grid-cols-4 sm:gap-6 gap-3 text-xs sm:text-sm w-full sm:w-auto">
+                    <div className="text-center whitespace-nowrap">
+                      <div className="font-semibold text-rfl-coral">{m.approved_points ?? 0}</div>
+                      <div className="text-gray-600">Points</div>
+                    </div>
+                    <div className="text-center whitespace-nowrap">
+                      <div className="font-semibold text-rfl-navy">{typeof m.avg_rr === 'number' ? m.avg_rr : '-'}</div>
+                      <div className="text-gray-600">RR</div>
+                    </div>
+                    <div className="text-center whitespace-nowrap">
+                      <div className="font-semibold text-rfl-coral">{m.rest_used ?? 0}</div>
+                      <div className="text-gray-600">Rest</div>
+                    </div>
+                    <div className="text-center whitespace-nowrap">
+                      <div className="font-semibold text-rfl-navy">{m.missed_days ?? 0}</div>
+                      <div className="text-gray-600">Missed</div>
+                    </div>
                   </div>
                 </div>
               </div>
