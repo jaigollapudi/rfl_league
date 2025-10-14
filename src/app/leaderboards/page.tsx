@@ -105,7 +105,7 @@ export default function LeaderboardsPage() {
         <Card className="bg-white shadow-md">
           <CardHeader>
             <CardTitle className="text-xl text-rfl-navy">Teams</CardTitle>
-            <CardDescription>Team standings</CardDescription>
+            <CardDescription>Team Standings</CardDescription>
           </CardHeader>
           <CardContent>
             {/* Rank cards + bars */}

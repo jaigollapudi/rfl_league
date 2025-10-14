@@ -359,14 +359,14 @@ export default function TeamPage() {
               ) : null}
               {/* Workout details */}
               <div className="mt-6 text-sm text-gray-800">
-                <div className="font-semibold text-rfl-navy mb-1">Workout details</div>
+                <div className="font-semibold text-rfl-navy mb-1">Workout Details</div>
                 <div className="space-y-1">
-                  <div>Type: {previewEntry.type === 'rest' ? 'Rest Day' : (previewEntry.workout_type || '—')}</div>
-                  {previewEntry.duration ? <div>Duration: {previewEntry.duration} min</div> : null}
+                  <div><b>Type:</b> {previewEntry.type === 'rest' ? 'Rest Day' : (previewEntry.workout_type || '—')}</div>
+                  {previewEntry.duration ? <div><b>Duration:</b> {previewEntry.duration} min</div> : null}
                   {previewEntry.distance ? <div>Distance: {previewEntry.distance} km</div> : null}
-                  {previewEntry.steps ? <div>Steps: {previewEntry.steps}</div> : null}
-                  {previewEntry.holes ? <div>Holes: {previewEntry.holes}</div> : null}
-                  {typeof previewEntry.rr_value === 'number' ? <div>RR: {Number(previewEntry.rr_value).toFixed(2)}</div> : null}
+                  {previewEntry.steps ? <div><b>Steps:</b> {previewEntry.steps}</div> : null}
+                  {previewEntry.holes ? <div><b>Holes:</b> {previewEntry.holes}</div> : null}
+                  {typeof previewEntry.rr_value === 'number' ? <div><b>RR:</b> {Number(previewEntry.rr_value).toFixed(2)}</div> : null}
                 </div>
               </div>
             </div>
