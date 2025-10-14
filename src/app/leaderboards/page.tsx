@@ -71,17 +71,53 @@ export default function LeaderboardsPage() {
 
       const dates: string[] = []; let cursor = start; while (cursor.getTime() <= today.getTime()) { dates.push(new Date(cursor).toISOString().split('T')[0]); cursor = new Date(cursor.getTime() + 24*3600*1000); }
       const pointsByTeam = new Map<string, number>(); const rrAggByTeam = new Map<string,{sum:number;count:number}>(); const restByTeam = new Map<string, number>();
-      const daysWithAnyActivity = new Map<string, Set<string>>();
+      // Build map of team -> date -> set(user_ids) to determine per-day completeness
+      const byTeamDateUsers = new Map<string, Map<string, Set<string>>>();
       (rawEntries || []).forEach((e: any) => {
         const tid = String(e.team_id || ''); if (!tid) return; const ds = String(e.date);
         pointsByTeam.set(tid, (pointsByTeam.get(tid) || 0) + 1);
-        const set = daysWithAnyActivity.get(ds) || new Set<string>(); set.add(tid); daysWithAnyActivity.set(ds, set);
         const rr = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
         if (rr > 0) { const agg = rrAggByTeam.get(tid) || { sum: 0, count: 0 }; agg.sum += rr; agg.count += 1; rrAggByTeam.set(tid, agg); }
         if (String(e.type) === 'rest') { restByTeam.set(tid, (restByTeam.get(tid) || 0) + 1); }
+        const perDate = byTeamDateUsers.get(tid) || new Map<string, Set<string>>();
+        const set = perDate.get(ds) || new Set<string>();
+        // We don't have user_id in this query, so fetch them separately
+        // To avoid extra queries per row, we will fetch team members below and only compare counts. For now mark a placeholder.
+        // perDate will count number of entries regardless of who made them.
+        // We'll store string 'count' by duplicating entries via set.add(`${tid}-${Math.random()}`) would be wrong. Instead, we will refetch with user_id below.
       });
+
+      // Re-fetch minimal set containing user_id for completeness check
+      const { data: rawEntriesUsers } = await getSupabase()
+        .from('entries')
+        .select('date, team_id, user_id')
+        .eq('status','approved')
+        .gte('date', start.toISOString().split('T')[0])
+        .lte('date', today.toISOString().split('T')[0]);
+      const perTeamDateUsers = new Map<string, Map<string, Set<string>>>();
+      (rawEntriesUsers || []).forEach((e: any) => {
+        const tid = String(e.team_id || ''); if (!tid) return; const ds = String(e.date); const uid = String(e.user_id || '');
+        const m = perTeamDateUsers.get(tid) || new Map<string, Set<string>>();
+        const s = m.get(ds) || new Set<string>(); if (uid) s.add(uid); m.set(ds, s); perTeamDateUsers.set(tid, m);
+      });
+
+      // Fetch team members to know per-team size
+      const { data: teamMembers } = teamIds.length ? await getSupabase().from('accounts').select('id, team_id').in('team_id', teamIds) : { data: [] } as { data: Array<{ id: string; team_id: string }> };
+      const memberIdsByTeam = new Map<string, Set<string>>();
+      (teamMembers || []).forEach((m:any)=>{ const tid = String(m.team_id); const set = memberIdsByTeam.get(tid) || new Set<string>(); set.add(String(m.id)); memberIdsByTeam.set(tid,set); });
+
       const missedByTeam = new Map<string, number>(); const allTeamIds = new Set<string>(teamIds);
-      dates.forEach((ds) => { const present = daysWithAnyActivity.get(ds) || new Set<string>(); allTeamIds.forEach((tid) => { if (!present.has(tid)) missedByTeam.set(tid, (missedByTeam.get(tid) || 0)+1); }); });
+      allTeamIds.forEach((tid)=>{ missedByTeam.set(tid,0); });
+      dates.forEach((ds)=>{
+        allTeamIds.forEach((tid)=>{
+          const members = memberIdsByTeam.get(tid) || new Set<string>();
+          if (members.size === 0) return; // no members
+          const presentUsers = (perTeamDateUsers.get(tid)?.get(ds)) || new Set<string>();
+          if (presentUsers.size < members.size) {
+            missedByTeam.set(tid, (missedByTeam.get(tid) || 0) + 1);
+          }
+        });
+      });
       const standingsData: LeagueTeam[] = Array.from(allTeamIds).map((tid) => ({
         teamId: tid,
         teamName: teamNameById.get(tid) || `Team ${tid.slice(0,4)}`,
