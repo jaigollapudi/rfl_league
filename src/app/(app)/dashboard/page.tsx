@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { getSupabase } from "@/lib/supabase";
 import TeamProgressChart from "./TeamProgressChart";
+import LeagueStandings, { LeagueTeam } from "./LeagueStandings";
 
 type ActivityRow = {
   date: string;
@@ -144,8 +145,8 @@ export default function DashboardPage() {
   const [teamAvgRR, setTeamAvgRR] = useState<number | null>(null);
   const [teamPosition, setTeamPosition] = useState<number | null>(null);
   const [chartDates, setChartDates] = useState<string[]>([]);
-  const [chartCumPoints, setChartCumPoints] = useState<number[]>([]);
-  const [chartCumAvgRR, setChartCumAvgRR] = useState<number[]>([]);
+  const [chartSeries, setChartSeries] = useState<Array<{ teamId: string; teamName: string; points: number[]; avgRR: number[] }>>([]);
+  const [weekRestDays, setWeekRestDays] = useState<number>(0);
   const [viewWeekStart, setViewWeekStart] = useState<Date>(() => {
     const now = new Date();
     const y = now.getUTCFullYear();
@@ -160,6 +161,7 @@ export default function DashboardPage() {
 
   const currentConfig = ACTIVITY_CONFIGS[activity];
   const PROOF_BUCKET = (process.env.NEXT_PUBLIC_PROOF_BUCKET as string) || 'rofl_proof_pics';
+  const [standings, setStandings] = useState<LeagueTeam[]>([]);
 
   const validateWorkout = useMemo(() => {
     if (!userId) return { valid: false, error: "" };
@@ -212,11 +214,14 @@ export default function DashboardPage() {
     if (error) return;
     const entries = (data || []) as Array<Omit<ActivityRow,'points'>>;
     const filled: ActivityRow[] = [];
+    let restCount = 0;
     for (let i = 0; i < 7; i++) {
       const day = new Date(ws);
       day.setUTCDate(ws.getUTCDate() + i);
       const ds = formatDateYYYYMMDD(day);
       const e = entries.find(x => String(x.date) === ds);
+      const isRest = e?.type === 'rest' && e?.status === 'approved';
+      if (isRest) restCount++;
       filled.push({
         date: ds,
         type: e?.type ?? null,
@@ -231,6 +236,7 @@ export default function DashboardPage() {
       });
     }
     setRows(filled);
+    setWeekRestDays(restCount);
   }
 
   useEffect(() => {
@@ -334,66 +340,136 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId, viewWeekStart, userId]);
 
-  // Build league-to-date progression chart data (cumulative points and avg RR)
+  // Build league-to-date comparison data across all teams + standings
   useEffect(() => {
     (async () => {
       if (!userId) return;
-      let effectiveTeamId = teamId;
-      if (!effectiveTeamId) {
-        const { data: acct } = await getSupabase()
-          .from('accounts')
-          .select('team_id')
-          .eq('id', userId)
-          .maybeSingle();
-        effectiveTeamId = ((acct as { team_id: string | null } | null)?.team_id) || null;
-        if (effectiveTeamId) setTeamId(effectiveTeamId);
-      }
-      if (!effectiveTeamId) return;
-
       const start = firstWeekStart(new Date().getUTCFullYear());
       const today = new Date();
-      const { data } = await getSupabase()
+
+      // Pull approved entries for the season for all teams
+      const { data: rawEntries } = await getSupabase()
         .from('entries')
-        .select('date, rr_value')
-        .eq('team_id', effectiveTeamId)
+        .select('date, team_id, rr_value, type')
         .eq('status', 'approved')
         .gte('date', formatDateYYYYMMDD(start))
         .lte('date', formatDateYYYYMMDD(today));
 
-      const byDate = new Map<string, { count: number; rrSum: number; rrCount: number }>();
-      (data || []).forEach((e: any) => {
-        const d = String(e.date);
-        const rec = byDate.get(d) || { count: 0, rrSum: 0, rrCount: 0 };
-        rec.count += 1;
-        const rr = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
-        if (rr > 0) { rec.rrSum += rr; rec.rrCount += 1; }
-        byDate.set(d, rec);
-      });
+      // Fetch team names for legend/labels
+      const teamIds = Array.from(new Set((rawEntries || []).map((e: any) => String(e.team_id)).filter(Boolean)));
+      const { data: teamsMeta } = teamIds.length ? await getSupabase().from('teams').select('id, name').in('id', teamIds) : { data: [] } as { data: Array<{ id: string; name: string }> };
+      const teamNameById = new Map<string, string>();
+      (teamsMeta || []).forEach((t: any) => teamNameById.set(String(t.id), String(t.name)));
 
+      // Pre-build full date axis
       const dates: string[] = [];
-      const cumPts: number[] = [];
-      const cumAvg: number[] = [];
       let cursor = new Date(start);
-      let cPts = 0; let rrSum = 0; let rrCnt = 0;
       while (cursor <= today) {
-        const ds = formatDateYYYYMMDD(cursor);
-        const rec = byDate.get(ds);
-        if (rec) {
-          cPts += rec.count;
-          rrSum += rec.rrSum;
-          rrCnt += rec.rrCount;
-        }
-        dates.push(ds);
-        cumPts.push(cPts);
-        cumAvg.push(rrCnt > 0 ? Math.round((rrSum / rrCnt) * 100) / 100 : 0);
+        dates.push(formatDateYYYYMMDD(cursor));
         cursor = addDaysUTC(cursor, 1);
       }
+
+      // Group entries by date and team
+      type Rec = { count: number; rrSum: number; rrCount: number };
+      const byDateTeam = new Map<string, Map<string, Rec>>();
+      (rawEntries || []).forEach((e: any) => {
+        const d = String(e.date);
+        const team = String(e.team_id || '');
+        if (!team) return;
+        const rr = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
+        const m = byDateTeam.get(d) || new Map<string, Rec>();
+        const rec = m.get(team) || { count: 0, rrSum: 0, rrCount: 0 };
+        rec.count += 1;
+        if (rr > 0) { rec.rrSum += rr; rec.rrCount += 1; }
+        m.set(team, rec);
+        byDateTeam.set(d, m);
+      });
+
+      // Create cumulative series for each team
+      const allTeams = Array.from(new Set(teamIds));
+      const series = allTeams.map((tid) => ({
+        teamId: tid,
+        teamName: teamNameById.get(String(tid)) || `Team ${tid.slice(0, 4)}`,
+        points: new Array(dates.length).fill(0) as number[],
+        avgRR: new Array(dates.length).fill(0) as number[],
+      }));
+      const idxByTeam = new Map(series.map((s, idx) => [s.teamId, idx] as const));
+
+      const rrAgg = new Map<string, { sum: number; count: number }>();
+      let dayIdx = 0;
+      for (const ds of dates) {
+        const m = byDateTeam.get(ds);
+        for (const tid of allTeams) {
+          const sIdx = idxByTeam.get(tid)!;
+          const s = series[sIdx];
+          const prevPts = dayIdx === 0 ? 0 : s.points[dayIdx - 1];
+          const rec = m?.get(tid);
+          const addPts = rec ? rec.count : 0;
+          s.points[dayIdx] = prevPts + addPts;
+
+          const agg = rrAgg.get(tid) || { sum: 0, count: 0 };
+          if (rec) { agg.sum += rec.rrSum; agg.count += rec.rrCount; }
+          rrAgg.set(tid, agg);
+          s.avgRR[dayIdx] = agg.count > 0 ? Math.round((agg.sum / agg.count) * 100) / 100 : 0;
+        }
+        dayIdx += 1;
+      }
+
       setChartDates(dates);
-      setChartCumPoints(cumPts);
-      setChartCumAvgRR(cumAvg);
+      setChartSeries(series);
+
+      // Standings: total points so far & missed days (season days counted vs points)
+      const totalDays = dates.length; // number of calendar days so far
+      const pointsByTeam = new Map<string, number>();
+      const rrAggByTeam = new Map<string, { sum: number; count: number }>();
+      const restUsedByTeam = new Map<string, number>();
+      const daysWithAnyActivity = new Map<string, Set<string>>(); // date -> set(teamId)
+
+      (rawEntries || []).forEach((e: any) => {
+        const tid = String(e.team_id || ''); if (!tid) return;
+        const ds = String(e.date);
+        // points are per approved entry
+        pointsByTeam.set(tid, (pointsByTeam.get(tid) || 0) + 1);
+        // track per-day activity for missed days calculation
+        const set = daysWithAnyActivity.get(ds) || new Set<string>();
+        set.add(tid);
+        daysWithAnyActivity.set(ds, set);
+        // RR aggregation (count non-zero values)
+        const rr = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
+        if (rr > 0) {
+          const agg = rrAggByTeam.get(tid) || { sum: 0, count: 0 };
+          agg.sum += rr; agg.count += 1;
+          rrAggByTeam.set(tid, agg);
+        }
+        if (String(e.type) === 'rest') {
+          restUsedByTeam.set(tid, (restUsedByTeam.get(tid) || 0) + 1);
+        }
+      });
+
+      // compute missed days per team: number of dates elapsed where team had no entries (workout or rest)
+      const missedByTeam = new Map<string, number>();
+      const allTeamIds = new Set<string>(teamIds);
+      dates.forEach((ds) => {
+        const present = daysWithAnyActivity.get(ds) || new Set<string>();
+        allTeamIds.forEach((tid) => {
+          if (!present.has(tid)) {
+            missedByTeam.set(tid, (missedByTeam.get(tid) || 0) + 1);
+          }
+        });
+      });
+
+      const standingsData: LeagueTeam[] = Array.from(allTeamIds).map((tid) => ({
+        teamId: tid,
+        teamName: teamNameById.get(tid) || `Team ${tid.slice(0,4)}`,
+        points: pointsByTeam.get(tid) || 0,
+        missedDays: missedByTeam.get(tid) || 0,
+        avgRR: (() => { const a = rrAggByTeam.get(tid); return a && a.count>0 ? Math.round((a.sum / a.count) * 100)/100 : 0; })(),
+        restUsed: restUsedByTeam.get(tid) || 0,
+      })).sort((a,b)=> b.points - a.points);
+      setStandings(standingsData);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamId, userId]);
+  }, [userId]);
 
   useEffect(() => {
     setDuration(currentConfig.minDuration || "");
@@ -531,6 +607,7 @@ export default function DashboardPage() {
                     <div className="font-semibold text-rfl-navy">This Week:</div>
                     <div>Points: <span className="font-semibold text-rfl-coral">{rows.reduce((a,r)=>a+(r.points||0),0)}</span></div>
                     <div>Avg RR: <span className="font-semibold text-rfl-navy">{(() => { const rr = rows.map(r=>r.rr_value||0).filter(v=>v>0); return rr.length ? (Math.round((rr.reduce((a,b)=>a+b,0)/rr.length)*100)/100).toFixed(2) : '0.00'; })()}</span></div>
+                    <div>Rest Days: <span className="font-semibold text-rfl-navy">{weekRestDays}</span></div>
                   </div>
                 </div>
               </div>
@@ -544,7 +621,7 @@ export default function DashboardPage() {
                     <div className="text-xs px-2 py-0.5 rounded-full bg-rfl-coral text-white">Position #{teamPosition}</div>
                   ) : null}
                 </div>
-                <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="grid grid-cols-2 gap-3 text-center">
                   <div className="p-3 bg-rfl-peach/50 rounded">
                     <div className="text-xs text-gray-600">Points (week)</div>
                     <div className="text-lg font-bold text-rfl-coral">{teamPoints ?? '—'}</div>
@@ -553,16 +630,29 @@ export default function DashboardPage() {
                     <div className="text-xs text-gray-600">Avg RR</div>
                     <div className="text-lg font-bold text-rfl-navy">{teamAvgRR !== null ? Number(teamAvgRR).toFixed(2) : '—'}</div>
                   </div>
-                  <div className="p-3 bg-rfl-peach/50 rounded">
-                    <div className="text-xs text-gray-600">Your week points</div>
-                    <div className="text-lg font-bold text-rfl-navy">{rows.reduce((a,r)=>a+(r.points||0),0)}</div>
-                  </div>
                 </div>
-                {/* Progression chart */}
+                {/* League Standings summary cards + bars */}
                 <div className="mt-4">
-                  <div className="text-xs font-semibold text-rfl-navy mb-2">{teamName ? `${teamName}'s cumulative league progression (Points & Avg RR)` : `League progression (Points & Avg RR)`}</div>
-                  {chartDates.length > 1 ? (
-                    <TeamProgressChart dates={chartDates} cumPoints={chartCumPoints} cumAvgRR={chartCumAvgRR} />
+                  {standings.length > 0 ? (
+                    <div className="space-y-3">
+                      {/* Top 3 cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {standings.slice(0,3).map((t, idx) => (
+                          <div key={t.teamId} className="p-4 rounded border bg-white flex flex-col items-center text-center">
+                            <div className="text-sm text-gray-700">{idx===0?'🥇 Rank 1': idx===1?'🥈 Rank 2':'🥉 Rank 3'}</div>
+                            <div className="text-lg font-semibold text-rfl-navy mt-1">{t.teamName}</div>
+                            <div className="text-3xl font-bold text-rfl-coral mt-2">{t.points}</div>
+                            <div className="text-xs text-gray-600 mt-1 flex gap-3">
+                              <span><b>Missed days:</b> {t.missedDays}</span>
+                              <span>|</span>
+                              <span><b>Avg RR:</b> {typeof t.avgRR === 'number' ? t.avgRR.toFixed(2) : '0.00'}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {/* Bars */}
+                      <LeagueStandings teams={standings} />
+                    </div>
                   ) : (
                     <div className="text-xs text-gray-600">No data yet.</div>
                   )}
@@ -603,23 +693,45 @@ export default function DashboardPage() {
           <CardContent>
             <div className="space-y-2">
               {rows.map((r) => (
-                <div key={r.date} className="flex items-center justify-between p-3 bg-white rounded border">
-                  <div>
-                    <div className="font-medium text-rfl-navy">{formatLocalDateLabel(r.date)}</div>
-                    <div className="text-sm text-gray-600">
-                      {r?.type ? (r.type === 'rest' ? 'Rest Day' : r.workout_type) : 'No entry'}
+                <details key={r.date} className="bg-white rounded border">
+                  <summary className="flex cursor-pointer items-center justify-between p-3 list-none">
+                    <div>
+                      <div className="font-medium text-rfl-navy">{formatLocalDateLabel(r.date)}</div>
+                      <div className="text-sm text-gray-600">
+                        {r?.type ? (r.type === 'rest' ? 'Rest Day' : r.workout_type) : 'No entry'}
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-semibold text-rfl-coral">{r.points ?? 0} pt</div>
-                    {r?.status && (
-                      <div className={`text-xs inline-block mt-1 px-2 py-0.5 rounded-full ${
-                        r.status === 'approved' ? 'bg-green-100 text-green-800' :
-                        r.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                      }`}>{r.status}</div>
-                    )}
-                  </div>
-                </div>
+                    <div className="text-right">
+                      <div className="font-semibold text-rfl-coral">{r.points ?? 0} pt</div>
+                      {r?.status && (
+                        <div className={`text-xs inline-block mt-1 px-2 py-0.5 rounded-full ${
+                          r.status === 'approved' ? 'bg-green-100 text-green-800' :
+                          r.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                        }`}>{r.status}</div>
+                      )}
+                    </div>
+                  </summary>
+                  {/* Detail content */}
+                  {r?.type ? (
+                    <div className="px-3 pb-3 text-sm text-gray-700">
+                      {r.type === 'rest' ? (
+                        <div>Rest day{typeof r.rr_value === 'number' ? ` • RR ${Number(r.rr_value).toFixed(2)}` : ''}</div>
+                      ) : (
+                        <div className="space-y-1">
+                          <div className="font-medium text-rfl-navy">Workout details</div>
+                          {r.workout_type && <div>Type: {r.workout_type}</div>}
+                          {r.duration ? <div>Duration: {r.duration} min</div> : null}
+                          {r.distance ? <div>Distance: {r.distance} km</div> : null}
+                          {r.steps ? <div>Steps: {r.steps}</div> : null}
+                          {r.holes ? <div>Holes: {r.holes}</div> : null}
+                          {typeof r.rr_value === 'number' ? <div>RR: {Number(r.rr_value).toFixed(2)}</div> : null}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="px-3 pb-3 text-sm text-gray-500">No details available.</div>
+                  )}
+                </details>
               ))}
             </div>
           </CardContent>
