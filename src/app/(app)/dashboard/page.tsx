@@ -7,7 +7,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { getSupabase } from "@/lib/supabase";
 import TeamProgressChart from "./TeamProgressChart";
-import LeagueStandings, { LeagueTeam } from "./LeagueStandings";
 
 type ActivityRow = {
   date: string;
@@ -145,7 +144,6 @@ export default function DashboardPage() {
   const [teamAvgRR, setTeamAvgRR] = useState<number | null>(null);
   const [teamPosition, setTeamPosition] = useState<number | null>(null);
   const [chartDates, setChartDates] = useState<string[]>([]);
-  const [chartSeries, setChartSeries] = useState<Array<{ teamId: string; teamName: string; points: number[]; avgRR: number[] }>>([]);
   const [weekRestDays, setWeekRestDays] = useState<number>(0);
   const [viewWeekStart, setViewWeekStart] = useState<Date>(() => {
     const now = new Date();
@@ -161,7 +159,7 @@ export default function DashboardPage() {
 
   const currentConfig = ACTIVITY_CONFIGS[activity];
   const PROOF_BUCKET = (process.env.NEXT_PUBLIC_PROOF_BUCKET as string) || 'rofl_proof_pics';
-  const [standings, setStandings] = useState<LeagueTeam[]>([]);
+  
 
   const validateWorkout = useMemo(() => {
     if (!userId) return { valid: false, error: "" };
@@ -340,136 +338,7 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId, viewWeekStart, userId]);
 
-  // Build league-to-date comparison data across all teams + standings
-  useEffect(() => {
-    (async () => {
-      if (!userId) return;
-      const start = firstWeekStart(new Date().getUTCFullYear());
-      const today = new Date();
-
-      // Pull approved entries for the season for all teams
-      const { data: rawEntries } = await getSupabase()
-        .from('entries')
-        .select('date, team_id, rr_value, type')
-        .eq('status', 'approved')
-        .gte('date', formatDateYYYYMMDD(start))
-        .lte('date', formatDateYYYYMMDD(today));
-
-      // Fetch team names for legend/labels
-      const teamIds = Array.from(new Set((rawEntries || []).map((e: any) => String(e.team_id)).filter(Boolean)));
-      const { data: teamsMeta } = teamIds.length ? await getSupabase().from('teams').select('id, name').in('id', teamIds) : { data: [] } as { data: Array<{ id: string; name: string }> };
-      const teamNameById = new Map<string, string>();
-      (teamsMeta || []).forEach((t: any) => teamNameById.set(String(t.id), String(t.name)));
-
-      // Pre-build full date axis
-      const dates: string[] = [];
-      let cursor = new Date(start);
-      while (cursor <= today) {
-        dates.push(formatDateYYYYMMDD(cursor));
-        cursor = addDaysUTC(cursor, 1);
-      }
-
-      // Group entries by date and team
-      type Rec = { count: number; rrSum: number; rrCount: number };
-      const byDateTeam = new Map<string, Map<string, Rec>>();
-      (rawEntries || []).forEach((e: any) => {
-        const d = String(e.date);
-        const team = String(e.team_id || '');
-        if (!team) return;
-        const rr = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
-        const m = byDateTeam.get(d) || new Map<string, Rec>();
-        const rec = m.get(team) || { count: 0, rrSum: 0, rrCount: 0 };
-        rec.count += 1;
-        if (rr > 0) { rec.rrSum += rr; rec.rrCount += 1; }
-        m.set(team, rec);
-        byDateTeam.set(d, m);
-      });
-
-      // Create cumulative series for each team
-      const allTeams = Array.from(new Set(teamIds));
-      const series = allTeams.map((tid) => ({
-        teamId: tid,
-        teamName: teamNameById.get(String(tid)) || `Team ${tid.slice(0, 4)}`,
-        points: new Array(dates.length).fill(0) as number[],
-        avgRR: new Array(dates.length).fill(0) as number[],
-      }));
-      const idxByTeam = new Map(series.map((s, idx) => [s.teamId, idx] as const));
-
-      const rrAgg = new Map<string, { sum: number; count: number }>();
-      let dayIdx = 0;
-      for (const ds of dates) {
-        const m = byDateTeam.get(ds);
-        for (const tid of allTeams) {
-          const sIdx = idxByTeam.get(tid)!;
-          const s = series[sIdx];
-          const prevPts = dayIdx === 0 ? 0 : s.points[dayIdx - 1];
-          const rec = m?.get(tid);
-          const addPts = rec ? rec.count : 0;
-          s.points[dayIdx] = prevPts + addPts;
-
-          const agg = rrAgg.get(tid) || { sum: 0, count: 0 };
-          if (rec) { agg.sum += rec.rrSum; agg.count += rec.rrCount; }
-          rrAgg.set(tid, agg);
-          s.avgRR[dayIdx] = agg.count > 0 ? Math.round((agg.sum / agg.count) * 100) / 100 : 0;
-        }
-        dayIdx += 1;
-      }
-
-      setChartDates(dates);
-      setChartSeries(series);
-
-      // Standings: total points so far & missed days (season days counted vs points)
-      const totalDays = dates.length; // number of calendar days so far
-      const pointsByTeam = new Map<string, number>();
-      const rrAggByTeam = new Map<string, { sum: number; count: number }>();
-      const restUsedByTeam = new Map<string, number>();
-      const daysWithAnyActivity = new Map<string, Set<string>>(); // date -> set(teamId)
-
-      (rawEntries || []).forEach((e: any) => {
-        const tid = String(e.team_id || ''); if (!tid) return;
-        const ds = String(e.date);
-        // points are per approved entry
-        pointsByTeam.set(tid, (pointsByTeam.get(tid) || 0) + 1);
-        // track per-day activity for missed days calculation
-        const set = daysWithAnyActivity.get(ds) || new Set<string>();
-        set.add(tid);
-        daysWithAnyActivity.set(ds, set);
-        // RR aggregation (count non-zero values)
-        const rr = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
-        if (rr > 0) {
-          const agg = rrAggByTeam.get(tid) || { sum: 0, count: 0 };
-          agg.sum += rr; agg.count += 1;
-          rrAggByTeam.set(tid, agg);
-        }
-        if (String(e.type) === 'rest') {
-          restUsedByTeam.set(tid, (restUsedByTeam.get(tid) || 0) + 1);
-        }
-      });
-
-      // compute missed days per team: number of dates elapsed where team had no entries (workout or rest)
-      const missedByTeam = new Map<string, number>();
-      const allTeamIds = new Set<string>(teamIds);
-      dates.forEach((ds) => {
-        const present = daysWithAnyActivity.get(ds) || new Set<string>();
-        allTeamIds.forEach((tid) => {
-          if (!present.has(tid)) {
-            missedByTeam.set(tid, (missedByTeam.get(tid) || 0) + 1);
-          }
-        });
-      });
-
-      const standingsData: LeagueTeam[] = Array.from(allTeamIds).map((tid) => ({
-        teamId: tid,
-        teamName: teamNameById.get(tid) || `Team ${tid.slice(0,4)}`,
-        points: pointsByTeam.get(tid) || 0,
-        missedDays: missedByTeam.get(tid) || 0,
-        avgRR: (() => { const a = rrAggByTeam.get(tid); return a && a.count>0 ? Math.round((a.sum / a.count) * 100)/100 : 0; })(),
-        restUsed: restUsedByTeam.get(tid) || 0,
-      })).sort((a,b)=> b.points - a.points);
-      setStandings(standingsData);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  // Removed league-wide standings from dashboard (moved to leaderboards page)
 
   useEffect(() => {
     setDuration(currentConfig.minDuration || "");
@@ -631,35 +500,7 @@ export default function DashboardPage() {
                     <div className="text-lg font-bold text-rfl-navy">{teamAvgRR !== null ? Number(teamAvgRR).toFixed(2) : '—'}</div>
                   </div>
                 </div>
-                {/* League Standings summary cards + bars */}
-                <div className="mt-4">
-                  {standings.length > 0 ? (
-                    <div className="space-y-3">
-                      {/* Top 3 cards */}
-                      {/* Mobile: horizontal scroll with compact cards; Desktop: 3-column grid */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:overflow-visible overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none]">
-                        <div className="hidden sm:block" />
-                        {standings.slice(0,3).map((t, idx) => (
-                          <div key={t.teamId} className="p-3 sm:p-4 rounded border bg-white flex flex-col items-center text-center min-w-[220px] sm:min-w-0">
-                            <div className="text-sm text-gray-700">{idx===0?'🥇 Rank 1': idx===1?'🥈 Rank 2':'🥉 Rank 3'}</div>
-                            <div className="text-base sm:text-lg font-semibold text-rfl-navy mt-1">{t.teamName}</div>
-                            <div className="text-2xl sm:text-3xl font-bold text-rfl-coral mt-1 sm:mt-2">{t.points}</div>
-                            <div className="text-[11px] sm:text-xs text-gray-600 mt-1 flex gap-2 sm:gap-3">
-                              <span><b>Missed days:</b> {t.missedDays}</span>
-                              <span>|</span>
-                              <span><b>Avg RR:</b> {typeof t.avgRR === 'number' ? t.avgRR.toFixed(2) : '0.00'}</span>
-                            </div>
-                          </div>
-                        ))}
-                        <div className="hidden sm:block" />
-                      </div>
-                      {/* Bars */}
-                      <LeagueStandings teams={standings} />
-                    </div>
-                  ) : (
-                    <div className="text-xs text-gray-600">No data yet.</div>
-                  )}
-                </div>
+                {/* League standings moved to /leaderboards page */}
               </div>
             </div>
           </CardContent>
