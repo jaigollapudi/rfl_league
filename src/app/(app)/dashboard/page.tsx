@@ -175,18 +175,28 @@ export default function DashboardPage() {
     }
 
     if (activity === "golf") {
-      const holesValid = holes && Number(holes) >= (config.minHoles || 0);
-      const stepsValid = steps && Number(steps) >= (config.minSteps || 0);
+      const holesProvided = holes !== "" && holes !== null && Number(holes) > 0;
+      const stepsProvided = steps !== "" && steps !== null && Number(steps) > 0;
+      if (holesProvided && stepsProvided) {
+        return { valid: false, error: "Please provide only one: Holes OR Steps" };
+      }
+      const holesValid = holesProvided && Number(holes) >= (config.minHoles || 0);
+      const stepsValid = stepsProvided && Number(steps) >= (config.minSteps || 0);
       if (!holesValid && !stepsValid) {
         return { valid: false, error: `Minimum ${config.minHoles} holes OR ${config.minSteps?.toLocaleString()} steps required` };
       }
       return { valid: true, error: "" };
     }
 
-    const durationValid = duration && Number(duration) >= (config.minDuration || 0);
-    const distanceValid = distance && Number(distance) >= (config.minDistance || 0);
+    const durationProvided = duration !== "" && duration !== null && Number(duration) > 0;
+    const distanceProvided = distance !== "" && distance !== null && Number(distance) > 0;
+    const durationValid = durationProvided && Number(duration) >= (config.minDuration || 0);
+    const distanceValid = distanceProvided && Number(distance) >= (config.minDistance || 0);
 
     if (config.fields.includes('distance') && config.minDistance) {
+      if (durationProvided && distanceProvided) {
+        return { valid: false, error: "Please provide only one: Duration OR Distance" };
+      }
       if (!durationValid && !distanceValid) {
         return { valid: false, error: `Minimum ${config.minDuration} mins OR ${config.minDistance} kms required` };
       }
@@ -661,17 +671,33 @@ export default function DashboardPage() {
                     <input value={distance ?? ''} onChange={(e)=>{ setDistance(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} step="0.1" className="w-full border rounded-md px-3 py-2" />
                   </div>
                 )}
-                {currentConfig.fields.includes('steps') && (
-                  <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
-                    <label className="block text-sm font-medium text-gray-700">Steps{currentConfig.minSteps ? ` — min ${currentConfig.minSteps.toLocaleString()}` : ''}</label>
-                    <input value={steps ?? ''} onChange={(e)=>{ setSteps(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
+                {activity === 'golf' ? (
+                  <div className="col-span-2 flex items-end gap-2">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700">Holes (golf){currentConfig.minHoles ? ` — min ${currentConfig.minHoles}` : ''}</label>
+                      <input value={holes ?? ''} onChange={(e)=>{ setHoles(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
+                    </div>
+                    <div className="pb-2 text-xs font-semibold text-gray-600">OR</div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700">Steps{currentConfig.minSteps ? ` — min ${currentConfig.minSteps.toLocaleString()}` : ''}</label>
+                      <input value={steps ?? ''} onChange={(e)=>{ setSteps(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
+                    </div>
                   </div>
-                )}
-                {currentConfig.fields.includes('holes') && (
-                  <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
-                    <label className="block text-sm font-medium text-gray-700">Holes (golf){currentConfig.minHoles ? ` — min ${currentConfig.minHoles}` : ''}</label>
-                    <input value={holes ?? ''} onChange={(e)=>{ setHoles(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
-                  </div>
+                ) : (
+                  <>
+                    {currentConfig.fields.includes('steps') && (
+                      <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
+                        <label className="block text-sm font-medium text-gray-700">Steps{currentConfig.minSteps ? ` — min ${currentConfig.minSteps.toLocaleString()}` : ''}</label>
+                        <input value={steps ?? ''} onChange={(e)=>{ setSteps(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
+                      </div>
+                    )}
+                    {currentConfig.fields.includes('holes') && (
+                      <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
+                        <label className="block text-sm font-medium text-gray-700">Holes (golf){currentConfig.minHoles ? ` — min ${currentConfig.minHoles}` : ''}</label>
+                        <input value={holes ?? ''} onChange={(e)=>{ setHoles(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
