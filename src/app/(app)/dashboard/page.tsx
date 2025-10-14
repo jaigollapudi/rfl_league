@@ -636,19 +636,22 @@ export default function DashboardPage() {
                   {standings.length > 0 ? (
                     <div className="space-y-3">
                       {/* Top 3 cards */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Mobile: horizontal scroll with compact cards; Desktop: 3-column grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:overflow-visible overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none]">
+                        <div className="hidden sm:block" />
                         {standings.slice(0,3).map((t, idx) => (
-                          <div key={t.teamId} className="p-4 rounded border bg-white flex flex-col items-center text-center">
+                          <div key={t.teamId} className="p-3 sm:p-4 rounded border bg-white flex flex-col items-center text-center min-w-[220px] sm:min-w-0">
                             <div className="text-sm text-gray-700">{idx===0?'🥇 Rank 1': idx===1?'🥈 Rank 2':'🥉 Rank 3'}</div>
-                            <div className="text-lg font-semibold text-rfl-navy mt-1">{t.teamName}</div>
-                            <div className="text-3xl font-bold text-rfl-coral mt-2">{t.points}</div>
-                            <div className="text-xs text-gray-600 mt-1 flex gap-3">
+                            <div className="text-base sm:text-lg font-semibold text-rfl-navy mt-1">{t.teamName}</div>
+                            <div className="text-2xl sm:text-3xl font-bold text-rfl-coral mt-1 sm:mt-2">{t.points}</div>
+                            <div className="text-[11px] sm:text-xs text-gray-600 mt-1 flex gap-2 sm:gap-3">
                               <span><b>Missed days:</b> {t.missedDays}</span>
                               <span>|</span>
                               <span><b>Avg RR:</b> {typeof t.avgRR === 'number' ? t.avgRR.toFixed(2) : '0.00'}</span>
                             </div>
                           </div>
                         ))}
+                        <div className="hidden sm:block" />
                       </div>
                       {/* Bars */}
                       <LeagueStandings teams={standings} />

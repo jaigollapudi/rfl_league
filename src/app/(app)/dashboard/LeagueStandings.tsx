@@ -18,7 +18,16 @@ type Props = {
 // Horizontal bar chart to show total points with missed days label at right
 export default function LeagueStandings({ teams }: Props) {
   const width = 720;
-  const rowH = 34;
+  // Responsive row height: larger on phones for readability
+  const [isSmall, setIsSmall] = React.useState(false);
+  React.useEffect(() => {
+    const m = window.matchMedia('(max-width: 640px)');
+    const onChange = () => setIsSmall(m.matches);
+    onChange();
+    m.addEventListener ? m.addEventListener('change', onChange) : m.addListener(onChange);
+    return () => { m.removeEventListener ? m.removeEventListener('change', onChange) : m.removeListener(onChange); };
+  }, []);
+  const rowH = isSmall ? 46 : 34;
   const paddingTop = 18;
   const paddingBottom = 16;
   const paddingLeft = 180; // space for team names
