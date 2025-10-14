@@ -237,16 +237,16 @@ export default function TeamPage() {
                       <div className="text-gray-600">Points</div>
                     </div>
                     <div className="text-center whitespace-nowrap">
-                      <div className="font-semibold text-rfl-navy">{typeof m.avg_rr === 'number' ? m.avg_rr : '-'}</div>
-                      <div className="text-gray-600">RR</div>
-                    </div>
-                    <div className="text-center whitespace-nowrap">
                       <div className="font-semibold text-rfl-coral">{m.rest_used ?? 0}</div>
                       <div className="text-gray-600">Rest</div>
                     </div>
                     <div className="text-center whitespace-nowrap">
                       <div className="font-semibold text-rfl-navy">{m.missed_days ?? 0}</div>
                       <div className="text-gray-600">Missed</div>
+                    </div>
+                    <div className="text-center whitespace-nowrap">
+                      <div className="font-semibold text-rfl-navy">{typeof m.avg_rr === 'number' ? m.avg_rr : '-'}</div>
+                      <div className="text-gray-600">RR</div>
                     </div>
                   </div>
                 </div>
@@ -376,6 +376,8 @@ export default function TeamPage() {
           {pendingCount > 0 && (
             <div className="mt-4">
               <button className="px-4 py-2 rounded bg-rfl-coral text-white" onClick={async()=>{
+                const ok = window.confirm('Approve all pending entries for the team?');
+                if (!ok) return;
                 if (!teamId) return;
                 // Approve ALL pending for the team (not just the page)
                 const { data: allIds } = await getSupabase()

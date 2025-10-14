@@ -647,13 +647,16 @@ export default function DashboardPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 {currentConfig.fields.includes('duration') && (
-                  <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
-                    <label className="block text-sm font-medium text-gray-700">Duration (mins){currentConfig.minDuration ? ` — min ${currentConfig.minDuration}` : ''}</label>
-                    <input value={duration ?? ''} onChange={(e)=>{ setDuration(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
+                  <div className={currentConfig.fields.length === 1 ? 'col-span-2' : 'flex items-end gap-2'}>
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700">Duration (mins){currentConfig.minDuration ? ` — min ${currentConfig.minDuration}` : ''}</label>
+                      <input value={duration ?? ''} onChange={(e)=>{ setDuration(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
+                    </div>
+                    {currentConfig.fields.length > 1 && <div className="pb-2 text-xs font-semibold text-gray-600">OR</div>}
                   </div>
                 )}
                 {currentConfig.fields.includes('distance') && (
-                  <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
+                  <div className={currentConfig.fields.length === 1 ? 'col-span-2' : 'flex-1'}>
                     <label className="block text-sm font-medium text-gray-700">Distance (km){currentConfig.minDistance ? ` — min ${currentConfig.minDistance}` : ''}</label>
                     <input value={distance ?? ''} onChange={(e)=>{ setDistance(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} step="0.1" className="w-full border rounded-md px-3 py-2" />
                   </div>

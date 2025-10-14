@@ -16,10 +16,10 @@ export default function SignInPage() {
     const res = await signIn("credentials", {
       firstName,
       lastName,
-      redirect: false,
+      redirect: true,
+      callbackUrl: "/dashboard",
     });
-    if (res?.ok) router.push("/dashboard");
-    else setError("Invalid first or last name");
+    if (!res) return; // next-auth handled redirect
   };
 
   return (
