@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useEffect, useMemo, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
 import LeagueStandings, { LeagueTeam } from "../(app)/dashboard/LeagueStandings";
+import React from "react";
 
 type TeamRow = { team_id: string; team_name: string; points: number; avg_rr: number | null };
 type PlayerRow = { user_id: string; name: string; team: string | null; points: number; avg_rr: number | null };
@@ -105,7 +106,7 @@ export default function LeaderboardsPage() {
         <Card className="bg-white shadow-md">
           <CardHeader>
             <CardTitle className="text-xl text-rfl-navy">Teams</CardTitle>
-            <CardDescription>Sorted by points, RR as tiebreaker</CardDescription>
+            <CardDescription>Team standings</CardDescription>
           </CardHeader>
           <CardContent>
             {/* Rank cards + bars */}
@@ -149,16 +150,7 @@ export default function LeaderboardsPage() {
                       <div className="text-xs text-gray-600">{p.team ?? '—'}</div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-6 text-sm">
-                    <div className="text-center">
-                      <div className="font-semibold text-rfl-coral">{p.points}</div>
-                      <div className="text-gray-600">points</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="font-semibold text-rfl-navy">{p.avg_rr ?? '-'}</div>
-                      <div className="text-gray-600">RR</div>
-                    </div>
-                  </div>
+                  <PlayerStats userId={p.user_id} points={p.points} avgRR={p.avg_rr} />
                 </div>
               ))}
               {!players.length && <div className="text-gray-600">No data yet.</div>}
@@ -173,4 +165,61 @@ export default function LeaderboardsPage() {
       </div>
     </div>
   )
+}
+
+function PlayerStats({ userId, points, avgRR }: { userId: string; points: number; avgRR: number | null }) {
+  const [restUsed, setRestUsed] = React.useState<number>(0);
+  const [missedDays, setMissedDays] = React.useState<number>(0);
+  React.useEffect(() => {
+    (async () => {
+      // total approved rest entries
+      const { count: restCount } = await getSupabase()
+        .from('entries')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('type', 'rest')
+        .eq('status', 'approved');
+      setRestUsed(restCount || 0);
+
+      // missed days since season start (user-specific)
+      const start = new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1));
+      const today = new Date();
+      const { data: dates } = await getSupabase()
+        .from('entries')
+        .select('date')
+        .eq('user_id', userId)
+        .eq('status', 'approved')
+        .gte('date', start.toISOString().split('T')[0])
+        .lte('date', today.toISOString().split('T')[0]);
+      const setDates = new Set((dates || []).map((e: any) => String(e.date)));
+      let missed = 0; let cur = new Date(start);
+      while (cur <= today) {
+        const ds = new Date(cur).toISOString().split('T')[0];
+        if (!setDates.has(ds)) missed += 1;
+        cur = new Date(cur.getTime() + 24 * 3600 * 1000);
+      }
+      setMissedDays(missed);
+    })();
+  }, [userId]);
+
+  return (
+    <div className="flex items-center gap-6 text-sm">
+      <div className="text-center">
+        <div className="font-semibold text-rfl-coral">{points}</div>
+        <div className="text-gray-600">points</div>
+      </div>
+      <div className="text-center">
+        <div className="font-semibold text-rfl-navy">{avgRR ?? '-'}</div>
+        <div className="text-gray-600">RR</div>
+      </div>
+      <div className="text-center">
+        <div className="font-semibold text-rfl-coral">{restUsed}</div>
+        <div className="text-gray-600">rest</div>
+      </div>
+      <div className="text-center">
+        <div className="font-semibold text-rfl-navy">{missedDays}</div>
+        <div className="text-gray-600">missed</div>
+      </div>
+    </div>
+  );
 }

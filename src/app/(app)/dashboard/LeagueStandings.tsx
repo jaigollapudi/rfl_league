@@ -40,8 +40,6 @@ export default function LeagueStandings({ teams }: Props) {
 
   const palette = "#6377F1"; // single color for consistency
 
-  // Tooltip state (hover on desktop, click on mobile)
-  const [activeIdx, setActiveIdx] = React.useState<number | null>(null);
   const barY = (idx: number) => paddingTop + idx * rowH;
 
   return (
@@ -69,17 +67,7 @@ export default function LeagueStandings({ teams }: Props) {
               {/* Bar background */}
               <rect x={paddingLeft} y={y + 8} width={width - paddingLeft - paddingRight} height={rowH - 16} fill="#f1f5f9" rx={4} />
               {/* Bar value */}
-              <rect
-                x={paddingLeft}
-                y={y + 8}
-                width={barW}
-                height={rowH - 16}
-                fill={palette}
-                rx={4}
-                onMouseEnter={() => setActiveIdx(idx)}
-                onMouseLeave={() => setActiveIdx(null)}
-                onClick={() => setActiveIdx(prev => (prev === idx ? null : idx))}
-              />
+              <rect x={paddingLeft} y={y + 8} width={barW} height={rowH - 16} fill={palette} rx={4} />
               {/* Team name inside bar if space allows, otherwise just outside the bar */}
               {barW > 90 ? (
                 <text x={paddingLeft + 8} y={y + rowH / 2} fontSize={isSmall ? 13 : 12} fill="#ffffff" fontWeight={600} dominantBaseline="middle">{t.teamName}</text>
@@ -92,27 +80,7 @@ export default function LeagueStandings({ teams }: Props) {
           );
         })}
 
-        {/* Tooltip */}
-        {activeIdx !== null && (() => {
-          const t = teams[activeIdx];
-          const y = barY(activeIdx);
-          const barW = Math.max(0, x(t.points) - paddingLeft);
-          const tipX = Math.min(width - 220, paddingLeft + barW + 8);
-          const tipY = y + 4;
-          return (
-            <foreignObject x={tipX} y={tipY} width={isSmall ? 240 : 210} height={isSmall ? 84 : 72}>
-              <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, padding: 8, fontSize: isSmall ? 13 : 12, color: '#0f172a' }}>
-                <div style={{ fontWeight: 600, marginBottom: 4 }}>{t.teamName}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: 6 }}>
-                  <span>Points:</span><span style={{ fontWeight: 600 }}>{t.points}</span>
-                  <span>Missed:</span><span>{Math.max(0, t.missedDays)}</span>
-                  <span>Rest used:</span><span>{t.restUsed ?? 0}</span>
-                  <span>Avg RR:</span><span>{typeof t.avgRR === 'number' ? t.avgRR.toFixed(2) : '0.00'}</span>
-                </div>
-              </div>
-            </foreignObject>
-          );
-        })()}
+        {/* Tooltip removed as requested */}
       </svg>
       <div className="text-[11px] text-gray-500 mt-1">Bars are sorted high to low. Number on each bar is total points.</div>
     </div>
