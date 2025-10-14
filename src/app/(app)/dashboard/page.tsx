@@ -512,7 +512,7 @@ export default function DashboardPage() {
                     <div className="text-xs px-2 py-0.5 rounded-full bg-rfl-coral text-white">Position #{teamPosition}</div>
                   ) : null}
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+                <div className="grid grid-cols-2 gap-3 text-center">
                   <div className="p-3 bg-rfl-peach/50 rounded">
                     <div className="text-xs text-gray-600">Points (week)</div>
                     <div className="text-lg font-bold text-rfl-coral">{teamPoints ?? '—'}</div>
