@@ -700,6 +700,7 @@ export default function DashboardPage() {
               <button onClick={() => setOpenRest(false)} className="text-gray-500">✕</button>
             </div>
             <div className="space-y-3">
+              <div className="text-sm text-rfl-navy font-semibold">You are taking a rest day. You have {Math.max(0, 18 - restUsed)} / 18 rest days left.</div>
               <div className="text-sm text-gray-700">Rest days remaining: <span className="font-semibold">{Math.max(0, 18 - restUsed)}</span> / 18</div>
               <label className="block text-sm font-medium text-gray-700">Date</label>
               <input value={date} onChange={(e)=>setDate(e.target.value)} type="date" max={todayStr()} className="w-full border rounded-md px-3 py-2" />
