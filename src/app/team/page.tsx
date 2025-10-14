@@ -124,7 +124,7 @@ export default function TeamPage() {
 
     // Missed days since season start for each member
     const seasonStart = new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1));
-    const today = new Date();
+    const today = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
     const datesByUser = new Map<string, Set<string>>();
     (entries || []).forEach((e: any) => {
       const ds = String(e.date);
@@ -137,7 +137,7 @@ export default function TeamPage() {
       let missed = 0;
       let cur = new Date(seasonStart);
       const set = datesByUser.get(uid) || new Set<string>();
-      while (cur <= today) {
+      while (cur.getTime() <= today.getTime()) {
         const ds = new Date(cur).toISOString().split('T')[0];
         if (!set.has(ds)) missed += 1;
         cur = new Date(cur.getTime() + 24 * 3600 * 1000);

@@ -333,6 +333,9 @@ export default function DashboardPage() {
       if (!effectiveTeamId) return;
       const ws = viewWeekStart;
       const we = new Date(ws); we.setUTCDate(ws.getUTCDate() + 6);
+      const todayOnly = new Date();
+      // clamp end date to today to avoid future-day counting
+      const lastDay = new Date(Math.min(we.getTime(), Date.UTC(todayOnly.getUTCFullYear(), todayOnly.getUTCMonth(), todayOnly.getUTCDate())));
       // Fetch team members
       const { data: teamUsers } = await getSupabase()
         .from('accounts')
@@ -346,7 +349,7 @@ export default function DashboardPage() {
         .eq('team_id', effectiveTeamId)
         .eq('status', 'approved')
         .gte('date', formatDateYYYYMMDD(ws))
-        .lte('date', formatDateYYYYMMDD(we));
+        .lte('date', formatDateYYYYMMDD(lastDay));
       const entries = (data || []) as Array<{ id: string; user_id: string; date: string; type: string | null; rr_value: number | null }>;
       const teamPts = entries.length; // every approved entry counts 1
       const rrVals = entries.map(e => (typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0))).filter(v => v > 0);
@@ -357,10 +360,13 @@ export default function DashboardPage() {
       const memberSet = new Set(memberIds);
       const byDateUser = new Set(entries.map(e => `${String(e.date)}|${String(e.user_id)}`));
       let missed = 0;
-      for (let i=0;i<7;i++) {
-        const day = new Date(ws); day.setUTCDate(ws.getUTCDate()+i);
-        const ds = formatDateYYYYMMDD(day);
-        memberSet.forEach((uid)=>{ if (!byDateUser.has(`${ds}|${uid}`)) missed += 1; });
+      {
+        let day = new Date(ws);
+        while (day.getTime() <= lastDay.getTime()) {
+          const ds = formatDateYYYYMMDD(day);
+          memberSet.forEach((uid)=>{ if (!byDateUser.has(`${ds}|${uid}`)) missed += 1; });
+          day.setUTCDate(day.getUTCDate()+1);
+        }
       }
       setTeamPoints(teamPts);
       setTeamAvgRR(teamRR);

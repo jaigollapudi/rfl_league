@@ -58,7 +58,7 @@ export default function LeaderboardsPage() {
   useEffect(() => {
     (async () => {
       const start = new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1));
-      const today = new Date();
+      const today = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
       const { data: rawEntries } = await getSupabase()
         .from('entries')
         .select('date, team_id, rr_value, type')
@@ -69,7 +69,7 @@ export default function LeaderboardsPage() {
       const { data: teamsMeta } = teamIds.length ? await getSupabase().from('teams').select('id, name').in('id', teamIds) : { data: [] } as { data: Array<{ id: string; name: string }> };
       const teamNameById = new Map<string, string>(); (teamsMeta || []).forEach((t: any) => teamNameById.set(String(t.id), String(t.name)));
 
-      const dates: string[] = []; let cursor = start; while (cursor <= today) { dates.push(new Date(cursor).toISOString().split('T')[0]); cursor = new Date(cursor.getTime() + 24*3600*1000); }
+      const dates: string[] = []; let cursor = start; while (cursor.getTime() <= today.getTime()) { dates.push(new Date(cursor).toISOString().split('T')[0]); cursor = new Date(cursor.getTime() + 24*3600*1000); }
       const pointsByTeam = new Map<string, number>(); const rrAggByTeam = new Map<string,{sum:number;count:number}>(); const restByTeam = new Map<string, number>();
       const daysWithAnyActivity = new Map<string, Set<string>>();
       (rawEntries || []).forEach((e: any) => {
