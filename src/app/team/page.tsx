@@ -60,7 +60,7 @@ export default function TeamPage() {
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [page, setPage] = useState<number>(1);
   const pageSize = 10;
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewEntry, setPreviewEntry] = useState<PendingEntry | null>(null);
 
   // discover the user's team
   useEffect(() => {
@@ -289,7 +289,7 @@ export default function TeamPage() {
                       {/* Desktop action group */}
                       <div className="hidden sm:flex shrink-0 gap-2">
                         {e.proof_url && (
-                          <button className="px-3 py-1 rounded border text-blue-700 border-blue-300 hover:bg-blue-50" onClick={()=> setPreviewUrl(e.proof_url!)}>View</button>
+                          <button className="px-3 py-1 rounded border text-blue-700 border-blue-300 hover:bg-blue-50" onClick={()=> setPreviewEntry(e)}>View</button>
                         )}
                         <button className="px-3 py-1 rounded border text-green-700 border-green-300 hover:bg-green-50" onClick={async()=>{
                           await getSupabase().from('entries').update({ status: 'approved' }).eq('id', e.id);
@@ -306,7 +306,7 @@ export default function TeamPage() {
                     {/* Mobile action row */}
                     <div className="mt-2 flex sm:hidden gap-2">
                       {e.proof_url && (
-                        <button className="flex-1 py-2 rounded border text-blue-700 border-blue-300 hover:bg-blue-50" onClick={()=> setPreviewUrl(e.proof_url!)}>View</button>
+                        <button className="flex-1 py-2 rounded border text-blue-700 border-blue-300 hover:bg-blue-50" onClick={()=> setPreviewEntry(e)}>View</button>
                       )}
                       <button className="flex-1 py-2 rounded border text-green-700 border-green-300 hover:bg-green-50" onClick={async()=>{
                         await getSupabase().from('entries').update({ status: 'approved' }).eq('id', e.id);
@@ -346,14 +346,28 @@ export default function TeamPage() {
           </Card>
 
         {/* Proof preview modal */}
-        {previewUrl && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={()=> setPreviewUrl(null)}>
+        {previewEntry && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={()=> setPreviewEntry(null)}>
             <div className="bg-white rounded-lg shadow-xl max-w-3xl w-[90%] p-3" onClick={(e)=> e.stopPropagation()}>
               <div className="flex justify-end mb-2">
-                <button className="text-gray-500 hover:text-gray-700" onClick={()=> setPreviewUrl(null)}>✕</button>
+                <button className="text-gray-500 hover:text-gray-700" onClick={()=> setPreviewEntry(null)}>✕</button>
               </div>
-              <div className="w-full flex justify-center">
-                <img src={previewUrl} alt="Proof" className="max-h-[75vh] object-contain" />
+              {previewEntry.proof_url ? (
+                <div className="w-full flex justify-center">
+                  <img src={previewEntry.proof_url} alt="Proof" className="max-h-[60vh] object-contain" />
+                </div>
+              ) : null}
+              {/* Workout details */}
+              <div className="mt-3 text-sm text-gray-800">
+                <div className="font-semibold text-rfl-navy mb-1">Log details</div>
+                <div className="space-y-1">
+                  <div>Type: {previewEntry.type === 'rest' ? 'Rest Day' : (previewEntry.workout_type || '—')}</div>
+                  {previewEntry.duration ? <div>Duration: {previewEntry.duration} min</div> : null}
+                  {previewEntry.distance ? <div>Distance: {previewEntry.distance} km</div> : null}
+                  {previewEntry.steps ? <div>Steps: {previewEntry.steps}</div> : null}
+                  {previewEntry.holes ? <div>Holes: {previewEntry.holes}</div> : null}
+                  {typeof previewEntry.rr_value === 'number' ? <div>RR: {Number(previewEntry.rr_value).toFixed(2)}</div> : null}
+                </div>
               </div>
             </div>
           </div>
