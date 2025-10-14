@@ -358,8 +358,8 @@ export default function TeamPage() {
                 </div>
               ) : null}
               {/* Workout details */}
-              <div className="mt-3 text-sm text-gray-800">
-                <div className="font-semibold text-rfl-navy mb-1">Log details</div>
+              <div className="mt-6 text-sm text-gray-800">
+                <div className="font-semibold text-rfl-navy mb-1">Workout details</div>
                 <div className="space-y-1">
                   <div>Type: {previewEntry.type === 'rest' ? 'Rest Day' : (previewEntry.workout_type || '—')}</div>
                   {previewEntry.duration ? <div>Duration: {previewEntry.duration} min</div> : null}
