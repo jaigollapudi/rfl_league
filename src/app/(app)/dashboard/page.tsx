@@ -394,10 +394,7 @@ export default function DashboardPage() {
       setValidationError(validateWorkout.error);
       return;
     }
-    if (!proofFile) {
-      setProofError('Please upload a screenshot/photo as proof.');
-      return;
-    }
+    // Temporarily disable strict proof requirement; allow saving without an image
     if (date > todayStr()) {
       alert("Future dates are not allowed.");
       return;
@@ -414,15 +411,18 @@ export default function DashboardPage() {
 
     setLoading(true);
     try {
-      // 1) Upload proof image to Supabase Storage
-      const safeName = proofFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const filePath = `${userId}/${date}/${Date.now()}-${safeName}`;
-      const { error: uploadErr } = await getSupabase().storage.from(PROOF_BUCKET).upload(filePath, proofFile, {
-        cacheControl: '3600', upsert: true, contentType: proofFile.type || 'image/jpeg'
-      });
-      if (uploadErr) { setProofError('Upload failed, please try again.'); throw uploadErr; }
-      const { data: pub } = getSupabase().storage.from(PROOF_BUCKET).getPublicUrl(filePath);
-      const proofUrl = pub?.publicUrl || null;
+      // 1) Upload proof image to Supabase Storage (optional for now)
+      let proofUrl: string | null = null;
+      if (proofFile) {
+        const safeName = proofFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const filePath = `${userId}/${date}/${Date.now()}-${safeName}`;
+        const { error: uploadErr } = await getSupabase().storage.from(PROOF_BUCKET).upload(filePath, proofFile, {
+          cacheControl: '3600', upsert: true, contentType: proofFile.type || 'image/jpeg'
+        });
+        if (uploadErr) { setProofError('Upload failed, please try again.'); throw uploadErr; }
+        const { data: pub } = getSupabase().storage.from(PROOF_BUCKET).getPublicUrl(filePath);
+        proofUrl = pub?.publicUrl || null;
+      }
 
       // 2) Save workout entry with proof URL as pending for leader approval
       await getSupabase().rpc("rfl_upsert_workout", {
