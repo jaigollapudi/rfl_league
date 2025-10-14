@@ -10,6 +10,8 @@ type MemberRow = {
   name: string;
   approved_points: number;
   avg_rr: number | null;
+  rest_used?: number;
+  missed_days?: number;
 };
 
 type PendingEntry = {
@@ -82,13 +84,15 @@ export default function TeamPage() {
         name: String(u.first_name || ''),
         approved_points: 0,
         avg_rr: null,
+        rest_used: 0,
+        missed_days: 0,
       });
     });
 
     // Fetch ALL approved entries for team (no date filter)
     const { data: entries } = await getSupabase()
       .from('entries')
-      .select('user_id, rr_value, type')
+      .select('user_id, rr_value, type, date')
       .eq('team_id', currentTeamId)
       .eq('status', 'approved');
 
@@ -100,6 +104,7 @@ export default function TeamPage() {
         const rrNum = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
         const isRest = e.type === 'rest';
         row.approved_points += isRest ? (rrNum > 0 ? 1 : 0) : 1;
+        if (isRest) row.rest_used = (row.rest_used || 0) + 1;
         if (rrNum > 0) {
           const agg = rrAgg.get(uid) || { sum: 0, count: 0 };
           agg.sum += rrNum;
@@ -115,6 +120,29 @@ export default function TeamPage() {
       if (row) {
         row.avg_rr = Math.round((agg.sum / Math.max(1, agg.count)) * 100) / 100;
       }
+    });
+
+    // Missed days since season start for each member
+    const seasonStart = new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1));
+    const today = new Date();
+    const datesByUser = new Map<string, Set<string>>();
+    (entries || []).forEach((e: any) => {
+      const ds = String(e.date);
+      const uid = String(e.user_id);
+      const set = datesByUser.get(uid) || new Set<string>();
+      set.add(ds);
+      datesByUser.set(uid, set);
+    });
+    memberMap.forEach((row, uid) => {
+      let missed = 0;
+      let cur = new Date(seasonStart);
+      const set = datesByUser.get(uid) || new Set<string>();
+      while (cur <= today) {
+        const ds = new Date(cur).toISOString().split('T')[0];
+        if (!set.has(ds)) missed += 1;
+        cur = new Date(cur.getTime() + 24 * 3600 * 1000);
+      }
+      row.missed_days = missed;
     });
 
     const sortedMembers = Array.from(memberMap.values()).sort((a,b)=> (b.approved_points||0)-(a.approved_points||0) || ((b.avg_rr||0)-(a.avg_rr||0)) );
@@ -210,6 +238,14 @@ export default function TeamPage() {
                   <div className="text-center">
                     <div className="font-semibold text-rfl-navy">{typeof m.avg_rr === 'number' ? m.avg_rr : '-'}</div>
                     <div className="text-gray-600">RR</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-rfl-coral">{m.rest_used ?? 0}</div>
+                    <div className="text-gray-600">rest</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="font-semibold text-rfl-navy">{m.missed_days ?? 0}</div>
+                    <div className="text-gray-600">missed</div>
                   </div>
                 </div>
               </div>
