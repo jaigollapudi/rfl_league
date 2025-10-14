@@ -74,7 +74,11 @@ export function Navbar() {
                   Sign Out
                 </Button>
               ) : (
-                <Link href="/signin" className="text-sm underline">Sign In</Link>
+                <Link href="/signin">
+                  <Button variant="outline" size="sm" className="text-rfl-navy border-white hover:bg-white hover:text-rfl-navy">
+                    Sign In
+                  </Button>
+                </Link>
               )}
             </div>
             {/* Hamburger toggle (mobile only) */}
