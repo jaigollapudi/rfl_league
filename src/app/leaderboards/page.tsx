@@ -178,7 +178,7 @@ export default function LeaderboardsPage() {
               {players.map((p, idx) => (
                 <div key={p.user_id} className="grid grid-cols-3 sm:flex sm:items-center sm:justify-between p-3 border rounded">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-rfl-coral text-white flex items-center justify-center font-semibold">{idx+1 + (page-1)*pageSize}</div>
+                    <div className="w-8 h-8 shrink-0 rounded-full bg-rfl-coral text-white flex items-center justify-center font-semibold leading-none [font-variant-numeric:tabular-nums]">{idx+1 + (page-1)*pageSize}</div>
                     <div>
                       <div className="font-medium text-rfl-navy">{p.name}</div>
                       <div className="text-xs text-gray-600">{p.team ?? '—'}</div>
