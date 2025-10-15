@@ -25,7 +25,6 @@ const authOptions = {
           .eq("last_name", lastName)
           .maybeSingle();
         if (!data) return null;
-        // Relax return typing to avoid NextAuth types friction during build
         return { id: data.id, name: data.first_name, role: data.role } as any;
       },
     }),
@@ -40,7 +39,6 @@ const authOptions = {
       return token;
     },
     async session({ session, token }: { session: any; token: any }) {
-      // Ensure safe defaults and avoid strict type mismatches
       (session as any).user = {
         id: String((token as any)?.id || ""),
         name: String((token as any)?.name ?? ""),
@@ -51,7 +49,6 @@ const authOptions = {
   },
 } as const;
 
-// Relax config typing at callsite to prevent build-time type incompatibilities
 const handler = NextAuth(authOptions as any);
 export { handler as GET, handler as POST };
 

@@ -124,7 +124,13 @@ export default function LeaderboardsPage() {
           restUsed,
         });
       }
-      standingsData.sort((a,b)=> b.points - a.points);
+      standingsData.sort((a,b)=> {
+        const byPoints = b.points - a.points;
+        if (byPoints !== 0) return byPoints;
+        const aRR = typeof a.avgRR === 'number' ? a.avgRR : 0;
+        const bRR = typeof b.avgRR === 'number' ? b.avgRR : 0;
+        return bRR - aRR; // tie-breaker: higher RR first
+      });
       setStandings(standingsData);
     })();
   }, []);
