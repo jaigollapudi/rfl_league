@@ -181,7 +181,7 @@ export default function LeaderboardsPage() {
           <CardContent>
             <div className="space-y-2">
               {players.map((p, idx) => (
-                <div key={p.user_id} className="flex items-center justify-between p-3 border rounded">
+                <div key={p.user_id} className="grid grid-cols-3 sm:flex sm:items-center sm:justify-between p-3 border rounded">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-rfl-coral text-white flex items-center justify-center font-semibold">{idx+1 + (page-1)*pageSize}</div>
                     <div>
@@ -189,12 +189,13 @@ export default function LeaderboardsPage() {
                       <div className="text-xs text-gray-600">{p.team ?? '—'}</div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-6 text-sm">
-                    <div className="text-center">
+                  {/* Fixed-width stats to avoid zigzag */}
+                  <div className="col-span-2 sm:col-auto flex items-center justify-end gap-8 text-sm">
+                    <div className="text-center" style={{ minWidth: 48 }}>
                       <div className="font-semibold text-rfl-coral">{p.points}</div>
                       <div className="text-gray-600">points</div>
                     </div>
-                    <div className="text-center">
+                    <div className="text-center" style={{ minWidth: 48 }}>
                       <div className="font-semibold text-rfl-navy">{p.avg_rr ?? '-'}</div>
                       <div className="text-gray-600">RR</div>
                     </div>
