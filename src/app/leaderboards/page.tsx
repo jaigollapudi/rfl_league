@@ -53,83 +53,78 @@ export default function LeaderboardsPage() {
     })();
   }, [page]);
 
-  // Build standings + bars (moved from dashboard)
+  // Build standings + bars: simplified using direct per-team aggregation matching Team page
   const [standings, setStandings] = useState<LeagueTeam[]>([]);
   useEffect(() => {
     (async () => {
       const start = new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1));
       const today = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-      const { data: rawEntries } = await getSupabase()
-        .from('entries')
-        .select('date, team_id, rr_value, type')
-        .eq('status', 'approved')
-        .gte('date', start.toISOString().split('T')[0])
-        .lte('date', today.toISOString().split('T')[0]);
-      const teamIds = Array.from(new Set((rawEntries || []).map((e: any) => String(e.team_id)).filter(Boolean)));
-      const { data: teamsMeta } = teamIds.length ? await getSupabase().from('teams').select('id, name').in('id', teamIds) : { data: [] } as { data: Array<{ id: string; name: string }> };
-      const teamNameById = new Map<string, string>(); (teamsMeta || []).forEach((t: any) => teamNameById.set(String(t.id), String(t.name)));
+      const seasonStart = start.toISOString().split('T')[0];
+      const seasonEnd = today.toISOString().split('T')[0];
 
-      const dates: string[] = []; let cursor = start; while (cursor.getTime() <= today.getTime()) { dates.push(new Date(cursor).toISOString().split('T')[0]); cursor = new Date(cursor.getTime() + 24*3600*1000); }
-      const pointsByTeam = new Map<string, number>(); const rrAggByTeam = new Map<string,{sum:number;count:number}>(); const restByTeam = new Map<string, number>();
-      // Build map of team -> date -> set(user_ids) to determine per-day completeness
-      const byTeamDateUsers = new Map<string, Map<string, Set<string>>>();
-      (rawEntries || []).forEach((e: any) => {
-        const tid = String(e.team_id || ''); if (!tid) return; const ds = String(e.date);
-        // Match team page points rule: workouts always 1; rest day counts 1 only if RR > 0
-        const rrNum = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
-        const isRest = String(e.type) === 'rest';
-        const addPoint = isRest ? (rrNum > 0) : true;
-        if (addPoint) pointsByTeam.set(tid, (pointsByTeam.get(tid) || 0) + 1);
-        const rr = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
-        if (rr > 0) { const agg = rrAggByTeam.get(tid) || { sum: 0, count: 0 }; agg.sum += rr; agg.count += 1; rrAggByTeam.set(tid, agg); }
-        if (String(e.type) === 'rest') { restByTeam.set(tid, (restByTeam.get(tid) || 0) + 1); }
-        const perDate = byTeamDateUsers.get(tid) || new Map<string, Set<string>>();
-        const set = perDate.get(ds) || new Set<string>();
-        // We don't have user_id in this query, so fetch them separately
-        // To avoid extra queries per row, we will fetch team members below and only compare counts. For now mark a placeholder.
-        // perDate will count number of entries regardless of who made them.
-        // We'll store string 'count' by duplicating entries via set.add(`${tid}-${Math.random()}`) would be wrong. Instead, we will refetch with user_id below.
-      });
+      // Fetch all teams
+      const { data: allTeams } = await getSupabase().from('teams').select('id, name');
+      const teams = (allTeams || []) as Array<{ id: string; name: string }>;
 
-      // Re-fetch minimal set containing user_id for completeness check
-      const { data: rawEntriesUsers } = await getSupabase()
-        .from('entries')
-        .select('date, team_id, user_id')
-        .eq('status','approved')
-        .gte('date', start.toISOString().split('T')[0])
-        .lte('date', today.toISOString().split('T')[0]);
-      const perTeamDateUsers = new Map<string, Map<string, Set<string>>>();
-      (rawEntriesUsers || []).forEach((e: any) => {
-        const tid = String(e.team_id || ''); if (!tid) return; const ds = String(e.date); const uid = String(e.user_id || '');
-        const m = perTeamDateUsers.get(tid) || new Map<string, Set<string>>();
-        const s = m.get(ds) || new Set<string>(); if (uid) s.add(uid); m.set(ds, s); perTeamDateUsers.set(tid, m);
-      });
+      const standingsData: LeagueTeam[] = [];
+      for (const team of teams) {
+        const tid = String(team.id);
 
-      // Fetch team members to know per-team size
-      const { data: teamMembers } = teamIds.length ? await getSupabase().from('accounts').select('id, team_id').in('team_id', teamIds) : { data: [] } as { data: Array<{ id: string; team_id: string }> };
-      const memberIdsByTeam = new Map<string, Set<string>>();
-      (teamMembers || []).forEach((m:any)=>{ const tid = String(m.team_id); const set = memberIdsByTeam.get(tid) || new Set<string>(); set.add(String(m.id)); memberIdsByTeam.set(tid,set); });
+        // Roster size
+        const { count: rosterSize } = await getSupabase()
+          .from('accounts')
+          .select('id', { count: 'exact', head: true })
+          .eq('team_id', tid);
+        const roster = rosterSize || 0;
 
-      const missedByTeam = new Map<string, number>(); const allTeamIds = new Set<string>(teamIds);
-      allTeamIds.forEach((tid)=>{ missedByTeam.set(tid,0); });
-      dates.forEach((ds)=>{
-        allTeamIds.forEach((tid)=>{
-          const members = memberIdsByTeam.get(tid) || new Set<string>();
-          if (members.size === 0) return; // no members
-          const presentUsers = (perTeamDateUsers.get(tid)?.get(ds)) || new Set<string>();
-          if (presentUsers.size < members.size) {
-            missedByTeam.set(tid, (missedByTeam.get(tid) || 0) + 1);
-          }
+        // Approved entries with user_id
+        const { data: entries } = await getSupabase()
+          .from('entries')
+          .select('type, rr_value, date, user_id')
+          .eq('team_id', tid)
+          .eq('status', 'approved')
+          .gte('date', seasonStart)
+          .lte('date', seasonEnd);
+        const ents = (entries || []) as Array<{ type: string; rr_value: number | null; date: string; user_id: string }>;
+
+        // Points: workout=1, rest=1 only if RR>0
+        let pts = 0; let rrSum = 0; let rrCnt = 0; let restUsed = 0;
+        ents.forEach(e => {
+          const rr = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
+          const isRest = String(e.type) === 'rest';
+          if (isRest && rr > 0) pts += 1;
+          else if (!isRest) pts += 1;
+          if (rr > 0) { rrSum += rr; rrCnt += 1; }
+          if (isRest) restUsed += 1;
         });
-      });
-      const standingsData: LeagueTeam[] = Array.from(allTeamIds).map((tid) => ({
-        teamId: tid,
-        teamName: teamNameById.get(tid) || `Team ${tid.slice(0,4)}`,
-        points: pointsByTeam.get(tid) || 0,
-        missedDays: missedByTeam.get(tid) || 0,
-        avgRR: (() => { const a = rrAggByTeam.get(tid); return a && a.count>0 ? Math.round((a.sum / a.count) * 100)/100 : 0; })(),
-        restUsed: restByTeam.get(tid) || 0,
-      })).sort((a,b)=> b.points - a.points);
+        const avgRR = rrCnt > 0 ? Math.round((rrSum / rrCnt) * 100) / 100 : 0;
+
+        // Missed days: per day, check if all members have entry
+        const byDateUsers = new Map<string, Set<string>>();
+        ents.forEach(e => {
+          const ds = String(e.date); const uid = String(e.user_id);
+          const s = byDateUsers.get(ds) || new Set<string>();
+          s.add(uid);
+          byDateUsers.set(ds, s);
+        });
+        let missed = 0; let cur = new Date(start);
+        while (cur.getTime() <= today.getTime()) {
+          const ds = cur.toISOString().split('T')[0];
+          const present = byDateUsers.get(ds)?.size || 0;
+          if (roster > 0 && present < roster) missed += 1;
+          cur = new Date(cur.getTime() + 24 * 3600 * 1000);
+        }
+
+        standingsData.push({
+          teamId: tid,
+          teamName: String(team.name),
+          points: pts,
+          missedDays: missed,
+          avgRR,
+          restUsed,
+        });
+      }
+      standingsData.sort((a,b)=> b.points - a.points);
       setStandings(standingsData);
     })();
   }, []);
