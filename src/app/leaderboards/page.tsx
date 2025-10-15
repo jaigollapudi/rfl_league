@@ -75,7 +75,11 @@ export default function LeaderboardsPage() {
       const byTeamDateUsers = new Map<string, Map<string, Set<string>>>();
       (rawEntries || []).forEach((e: any) => {
         const tid = String(e.team_id || ''); if (!tid) return; const ds = String(e.date);
-        pointsByTeam.set(tid, (pointsByTeam.get(tid) || 0) + 1);
+        // Match team page points rule: workouts always 1; rest day counts 1 only if RR > 0
+        const rrNum = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
+        const isRest = String(e.type) === 'rest';
+        const addPoint = isRest ? (rrNum > 0) : true;
+        if (addPoint) pointsByTeam.set(tid, (pointsByTeam.get(tid) || 0) + 1);
         const rr = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
         if (rr > 0) { const agg = rrAggByTeam.get(tid) || { sum: 0, count: 0 }; agg.sum += rr; agg.count += 1; rrAggByTeam.set(tid, agg); }
         if (String(e.type) === 'rest') { restByTeam.set(tid, (restByTeam.get(tid) || 0) + 1); }
