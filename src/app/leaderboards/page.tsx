@@ -53,7 +53,7 @@ export default function LeaderboardsPage() {
     })();
   }, [page]);
 
-  // Build standings + bars: simplified using direct per-team aggregation matching Team page
+  // Build standings + bars: fetch all data in parallel, then process per-team
   const [standings, setStandings] = useState<LeagueTeam[]>([]);
   useEffect(() => {
     (async () => {
@@ -62,30 +62,45 @@ export default function LeaderboardsPage() {
       const seasonStart = start.toISOString().split('T')[0];
       const seasonEnd = today.toISOString().split('T')[0];
 
-      // Fetch all teams
-      const { data: allTeams } = await getSupabase().from('teams').select('id, name');
-      const teams = (allTeams || []) as Array<{ id: string; name: string }>;
-
-      const standingsData: LeagueTeam[] = [];
-      for (const team of teams) {
-        const tid = String(team.id);
-
-        // Roster size
-        const { count: rosterSize } = await getSupabase()
-          .from('accounts')
-          .select('id', { count: 'exact', head: true })
-          .eq('team_id', tid);
-        const roster = rosterSize || 0;
-
-        // Approved entries with user_id
-        const { data: entries } = await getSupabase()
+      // Fetch ALL data in parallel (3 queries total instead of 6+)
+      const [teamsRes, accountsRes, entriesRes] = await Promise.all([
+        getSupabase().from('teams').select('id, name'),
+        getSupabase().from('accounts').select('id, team_id'),
+        getSupabase()
           .from('entries')
-          .select('type, rr_value, date, user_id')
-          .eq('team_id', tid)
+          .select('type, rr_value, date, user_id, team_id')
           .eq('status', 'approved')
           .gte('date', seasonStart)
-          .lte('date', seasonEnd);
-        const ents = (entries || []) as Array<{ type: string; rr_value: number | null; date: string; user_id: string }>;
+          .lte('date', seasonEnd)
+      ]);
+
+      const teams = (teamsRes.data || []) as Array<{ id: string; name: string }>;
+      const accounts = (accountsRes.data || []) as Array<{ id: string; team_id: string }>;
+      const allEntries = (entriesRes.data || []) as Array<{ type: string; rr_value: number | null; date: string; user_id: string; team_id: string }>;
+
+      // Pre-process: group accounts by team_id
+      const rosterByTeam = new Map<string, Set<string>>();
+      accounts.forEach(acc => {
+        const tid = String(acc.team_id);
+        const s = rosterByTeam.get(tid) || new Set<string>();
+        s.add(String(acc.id));
+        rosterByTeam.set(tid, s);
+      });
+
+      // Pre-process: group entries by team_id
+      const entriesByTeam = new Map<string, Array<{ type: string; rr_value: number | null; date: string; user_id: string }>>();
+      allEntries.forEach(e => {
+        const tid = String(e.team_id);
+        const arr = entriesByTeam.get(tid) || [];
+        arr.push({ type: e.type, rr_value: e.rr_value, date: e.date, user_id: e.user_id });
+        entriesByTeam.set(tid, arr);
+      });
+
+      // Now process each team with pre-fetched data
+      const standingsData: LeagueTeam[] = teams.map(team => {
+        const tid = String(team.id);
+        const roster = (rosterByTeam.get(tid)?.size) || 0;
+        const ents = entriesByTeam.get(tid) || [];
 
         // Points: workout=1, rest=1 only if RR>0
         let pts = 0; let rrSum = 0; let rrCnt = 0; let restUsed = 0;
@@ -115,15 +130,16 @@ export default function LeaderboardsPage() {
           cur = new Date(cur.getTime() + 24 * 3600 * 1000);
         }
 
-        standingsData.push({
+        return {
           teamId: tid,
           teamName: String(team.name),
           points: pts,
           missedDays: missed,
           avgRR,
           restUsed,
-        });
-      }
+        };
+      });
+
       standingsData.sort((a,b)=> b.points - a.points);
       setStandings(standingsData);
     })();
