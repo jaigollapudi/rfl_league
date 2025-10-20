@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { getSupabase } from "@/lib/supabase";
+// No hashing - passwords stored in plaintext per user's request
 
 declare module "next-auth" {
   interface Session {
@@ -22,31 +23,27 @@ const authConfig = {
     Credentials({
       name: "Credentials",
       credentials: {
-        firstName: { label: "First Name", type: "text" },
-        lastName: { label: "Last Name", type: "password" },
+        username: { label: "Username", type: "text" },
+        password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        const firstName = (credentials?.firstName || "").trim();
-        const lastName = (credentials?.lastName || "").trim();
-
-        if (!firstName || !lastName) return null;
-
-        const { data, error } = await getSupabase()
+        const username = (credentials?.username || "").trim();
+        const password = credentials?.password || "";
+        if (!username || !password) return null;
+        const { data: acct } = await getSupabase()
           .from("accounts")
-          .select("id, first_name, last_name, role, age")
-          .eq("first_name", firstName)
-          .eq("last_name", lastName)
+          .select("id, first_name, username, password, role, age")
+          .eq("username", username)
           .maybeSingle();
-
-        if (error) return null;
-        if (!data) return null;
-
-        return {
-          id: data.id,
-          name: data.first_name,
-          role: data.role as "player" | "leader",
-          age: (data as any)?.age ?? null,
-        } as { id: string; name: string; role: "player" | "leader"; age?: number | null };
+        if (acct && String((acct as any).password) === password) {
+          return {
+            id: acct.id,
+            name: acct.first_name,
+            role: acct.role as "player" | "leader",
+            age: (acct as any)?.age ?? null,
+          } as { id: string; name: string; role: "player" | "leader"; age?: number | null };
+        }
+        return null;
       },
     }),
   ],

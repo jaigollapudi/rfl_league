@@ -6,16 +6,17 @@ import { useRouter } from "next/navigation";
 
 export default function SignInPage() {
   const router = useRouter();
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+  // Username/password only
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     const res = await signIn("credentials", {
-      firstName,
-      lastName,
+      username,
+      password,
       redirect: true,
       callbackUrl: "/dashboard",
     });
@@ -28,12 +29,12 @@ export default function SignInPage() {
         <h1 className="text-2xl font-bold text-rfl-navy mb-4">Log in</h1>
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">First name</label>
-            <input value={firstName} onChange={e => setFirstName(e.target.value)} className="w-full border rounded-md px-3 py-2" required />
+            <label className="block text-sm font-medium text-gray-700">Username</label>
+            <input value={username} onChange={e => setUsername(e.target.value)} className="w-full border rounded-md px-3 py-2" placeholder="Enter username" required />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Last name</label>
-            <input type="password" value={lastName} onChange={e => setLastName(e.target.value)} className="w-full border rounded-md px-3 py-2" required />
+            <label className="block text-sm font-medium text-gray-700">Password</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full border rounded-md px-3 py-2" placeholder="Enter password" required />
           </div>
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button type="submit" className="w-full bg-rfl-navy text-white rounded-md py-2">Continue</button>

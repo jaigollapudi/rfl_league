@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { getSupabase } from "@/lib/supabase";
+// No hashing - passwords are stored in plaintext per user's request
 
 const authOptions = {
   session: {
@@ -11,21 +12,22 @@ const authOptions = {
     Credentials({
       name: "Credentials",
       credentials: {
-        firstName: { label: "First Name", type: "text" },
-        lastName: { label: "Last Name", type: "password" },
+        username: { label: "Username", type: "text" },
+        password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        const firstName = (credentials?.firstName || "").trim();
-        const lastName = (credentials?.lastName || "").trim();
-        if (!firstName || !lastName) return null;
-        const { data } = await getSupabase()
+        const username = (credentials?.username || "").trim();
+        const password = String(credentials?.password || "");
+        if (!username || !password) return null;
+        const { data: acct } = await getSupabase()
           .from("accounts")
-          .select("id, first_name, role, age")
-          .eq("first_name", firstName)
-          .eq("last_name", lastName)
+          .select("id, first_name, username, password, role, age")
+          .eq("username", username)
           .maybeSingle();
-        if (!data) return null;
-        return { id: data.id, name: data.first_name, role: data.role, age: (data as any)?.age ?? null } as any;
+        if (acct && String((acct as any).password) === password) {
+          return { id: acct.id, name: acct.first_name, role: acct.role, age: (acct as any)?.age ?? null } as any;
+        }
+        return null;
       },
     }),
   ],

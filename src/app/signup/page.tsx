@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
 import { signIn } from "next-auth/react";
+import bcrypt from "bcryptjs";
 
 interface Team {
   id: string;
@@ -12,8 +13,12 @@ interface Team {
 
 export default function SignUpPage() {
   const router = useRouter();
+  // Profile info
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  // Auth credentials
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [role, setRole] = useState<"player" | "leader">("player");
   const [teamId, setTeamId] = useState<string>("");
   const [teams, setTeams] = useState<Team[]>([]);
@@ -49,30 +54,47 @@ export default function SignUpPage() {
     e.preventDefault();
     setError(null);
 
-    const { data: existing } = await getSupabase()
-      .from("accounts")
-      .select("id")
-      .eq("first_name", firstName)
-      .maybeSingle();
-    if (existing) {
-      setError("That first name is already taken.");
+    if (!username || !password) {
+      setError("Please provide a username and password.");
       return;
     }
 
+    // Ensure username is unique
+    const { data: existing } = await getSupabase()
+      .from("accounts")
+      .select("id")
+      .eq("username", username)
+      .maybeSingle();
+    if (existing) {
+      setError("That username is already taken.");
+      return;
+    }
+
+    // Hash password client-side for now
+    const passwordHash = await bcrypt.hash(password, 10);
+
     const { error: insertError } = await getSupabase()
       .from("accounts")
-      .insert({ first_name: firstName, last_name: lastName, role, team_id: teamId || null });
+      .insert({
+        first_name: firstName,
+        last_name: lastName,
+        username,
+        password_hash: passwordHash,
+        role,
+        team_id: teamId || null,
+      });
 
     if (insertError) {
       setError(insertError.message);
       return;
     }
 
-    // Auto sign-in after sign-up
+    // Auto sign-in after sign-up with new credentials
     const res = await signIn("credentials", {
-      firstName,
-      lastName,
+      username,
+      password,
       redirect: false,
+      callbackUrl: "/dashboard",
     });
     if (res?.ok) router.push("/dashboard");
   };
@@ -82,13 +104,23 @@ export default function SignUpPage() {
       <div className="max-w-md mx-auto bg-white rounded-lg shadow p-6">
         <h1 className="text-2xl font-bold text-rfl-navy mb-4">Create your account</h1>
         <form onSubmit={onSubmit} className="space-y-4">
+          {/* Credentials */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">First name (username)</label>
+            <label className="block text-sm font-medium text-gray-700">Username</label>
+            <input value={username} onChange={e => setUsername(e.target.value)} className="w-full border rounded-md px-3 py-2" required />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Password</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} className="w-full border rounded-md px-3 py-2" required />
+          </div>
+          {/* Profile information */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">First name</label>
             <input value={firstName} onChange={e => setFirstName(e.target.value)} className="w-full border rounded-md px-3 py-2" required />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700">Last name (password)</label>
-            <input type="password" value={lastName} onChange={e => setLastName(e.target.value)} className="w-full border rounded-md px-3 py-2" required />
+            <label className="block text-sm font-medium text-gray-700">Last name</label>
+            <input value={lastName} onChange={e => setLastName(e.target.value)} className="w-full border rounded-md px-3 py-2" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
