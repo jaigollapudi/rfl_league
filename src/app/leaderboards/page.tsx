@@ -195,7 +195,7 @@ export default function LeaderboardsPage() {
                 <thead className="text-left text-gray-600">
                   <tr>
                     <th className="py-2 pr-2 text-xs font-semibold w-12">Pos</th>
-                    <th className="py-2 pr-2 text-xs font-semibold">Team</th>
+                    <th className="py-2 pr-2 text-xs font-semibold w-32">Team</th>
                     <th className="py-2 pr-2 text-xs font-semibold text-right w-16">Pts</th>
                     <th className="py-2 pr-2 text-xs font-semibold text-right w-16">Avg RR</th>
                   </tr>
@@ -211,8 +211,8 @@ export default function LeaderboardsPage() {
                     return (
                       <tr key={t.teamId} className="border-t hover:bg-gray-50">
                         <td className="py-2 pr-2 [font-variant-numeric:tabular-nums] font-bold text-rfl-navy text-sm w-12">{t.position}</td>
-                        <td className="py-2 pr-2">
-                          <div className="flex items-center gap-2 min-w-0">
+                        <td className="py-2 pr-2 w-32">
+                          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide">
                             <img 
                               src={logoPath} 
                               alt={`${t.teamName} logo`} 
@@ -222,7 +222,7 @@ export default function LeaderboardsPage() {
                                 (e.target as HTMLImageElement).src = '/img/placeholder-team.svg';
                               }}
                             />
-                            <span className="font-medium text-rfl-navy text-sm truncate">{t.teamName}</span>
+                            <span className="font-medium text-rfl-navy text-sm whitespace-nowrap min-w-max">{t.teamName}</span>
                           </div>
                         </td>
                         <td className="py-2 pr-2 text-right [font-variant-numeric:tabular-nums] font-bold text-rfl-coral text-sm w-16">{t.points}</td>
