@@ -542,12 +542,12 @@ export default function DashboardPage() {
   );
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-rfl-navy mb-2">My Dashboard</h1>
-        <p className="text-gray-600">Track your workouts and rest days.</p>
-      </div>
-
       <div className="max-w-4xl mx-auto space-y-8 mb-8">
+        {/* Dashboard title positioned above Summary card content */}
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-3xl font-bold text-rfl-navy mb-2">My Dashboard</h1>
+          <p className="text-gray-600">Track your workouts and rest days.</p>
+        </div>
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-2">
