@@ -27,12 +27,12 @@ export function Navbar() {
           {/* RFL Logo/Brand */}
           <div className="flex items-center space-x-4">
             <Link href="/dashboard" className="flex items-center space-x-2">
-              <div className="w-10 h-10 bg-rfl-light-blue rounded-lg flex items-center justify-center">
-                <Dumbbell className="w-6 h-6 text-white" />
+              <div className="w-10 h-10 rounded-lg overflow-hidden bg-white">
+                <img src="/img/PFL_Logo.jpeg" alt="PFL Logo" className="w-full h-full object-cover" />
               </div>
               <div>
-                <h1 className="text-lg font-bold">RFL</h1>
-                <p className="text-xs text-gray-300">Rotary Fitness League</p>
+                <h1 className="text-lg font-bold">PFL</h1>
+                <p className="text-xs text-gray-300">Pristine Fitness League</p>
               </div>
             </Link>
           </div>

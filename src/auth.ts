@@ -8,6 +8,7 @@ declare module "next-auth" {
       id: string;
       name: string;
       role: "player" | "leader";
+      age?: number | null;
     };
   }
 }
@@ -32,7 +33,7 @@ const authConfig = {
 
         const { data, error } = await getSupabase()
           .from("accounts")
-          .select("id, first_name, last_name, role")
+          .select("id, first_name, last_name, role, age")
           .eq("first_name", firstName)
           .eq("last_name", lastName)
           .maybeSingle();
@@ -44,7 +45,8 @@ const authConfig = {
           id: data.id,
           name: data.first_name,
           role: data.role as "player" | "leader",
-        } as { id: string; name: string; role: "player" | "leader" };
+          age: (data as any)?.age ?? null,
+        } as { id: string; name: string; role: "player" | "leader"; age?: number | null };
       },
     }),
   ],
@@ -54,6 +56,7 @@ const authConfig = {
         token.id = (user as unknown as { id: string }).id;
         token.name = user.name;
         token.role = (user as unknown as { role: "player" | "leader" }).role;
+        token.age = (user as any)?.age ?? null;
       }
       return token;
     },
@@ -62,6 +65,7 @@ const authConfig = {
         id: String(token.id || ""),
         name: String(token.name || ""),
         role: (token as { role?: "player" | "leader" }).role || "player",
+        age: (token as any)?.age ?? null,
       };
       return session;
     },

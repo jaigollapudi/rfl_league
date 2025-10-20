@@ -20,12 +20,12 @@ const authOptions = {
         if (!firstName || !lastName) return null;
         const { data } = await getSupabase()
           .from("accounts")
-          .select("id, first_name, role")
+          .select("id, first_name, role, age")
           .eq("first_name", firstName)
           .eq("last_name", lastName)
           .maybeSingle();
         if (!data) return null;
-        return { id: data.id, name: data.first_name, role: data.role } as any;
+        return { id: data.id, name: data.first_name, role: data.role, age: (data as any)?.age ?? null } as any;
       },
     }),
   ],
@@ -35,6 +35,7 @@ const authOptions = {
         (token as any).id = (user as any).id;
         (token as any).name = (user as any).name;
         (token as any).role = (user as any).role;
+        (token as any).age = (user as any).age ?? null;
       }
       return token;
     },
@@ -43,6 +44,7 @@ const authOptions = {
         id: String((token as any)?.id || ""),
         name: String((token as any)?.name ?? ""),
         role: (token as any)?.role ?? "player",
+        age: (token as any)?.age ?? null,
       };
       return session;
     },

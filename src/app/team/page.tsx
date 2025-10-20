@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { getSupabase } from "@/lib/supabase";
+import { ChevronDown } from "lucide-react";
 
 type MemberRow = {
   user_id: string;
@@ -51,6 +52,27 @@ function ymd(d: Date): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+// League date functions
+function firstWeekStart(year: number): Date {
+  return new Date(Date.UTC(year, 8, 1)); // Sept 1
+}
+
+function seasonEndStart(year: number): Date {
+  return new Date(Date.UTC(year, 11, 1)); // Dec 1
+}
+
+function addDaysUTC(d: Date, days: number): Date {
+  const copy = new Date(d.getTime());
+  copy.setUTCDate(copy.getUTCDate() + days);
+  return copy;
+}
+
+function getWeekNumber(seasonStart: Date, date: Date): number {
+  const diffTime = date.getTime() - seasonStart.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  return Math.floor(diffDays / 7) + 1;
+}
+
 export default function TeamPage() {
   const { data: session } = useSession();
   const userId = session?.user?.id;
@@ -61,6 +83,44 @@ export default function TeamPage() {
   const [page, setPage] = useState<number>(1);
   const pageSize = 10;
   const [previewEntry, setPreviewEntry] = useState<PendingEntry | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("overall");
+  const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
+  const [teamMissedDays, setTeamMissedDays] = useState<number>(0);
+  const [teamRestDays, setTeamRestDays] = useState<number>(0);
+
+  // Generate dropdown options based on league dates
+  const dropdownOptions = useMemo(() => {
+    const currentYear = new Date().getUTCFullYear();
+    const seasonStart = firstWeekStart(currentYear);
+    const seasonEnd = seasonEndStart(currentYear);
+    const today = new Date();
+    
+    const options = [{ value: "overall", label: "Overall" }];
+    
+    // Add weeks that are completed or currently in progress
+    let weekStart = new Date(seasonStart);
+    let weekNum = 1;
+    
+    while (weekStart.getTime() < seasonEnd.getTime()) {
+      const weekEnd = addDaysUTC(weekStart, 6);
+      const weekEndDate = new Date(Math.min(weekEnd.getTime(), today.getTime()));
+      
+      // Include week if it has started (even if not fully completed)
+      if (weekStart.getTime() <= today.getTime()) {
+        const startStr = weekStart.toISOString().split('T')[0];
+        const endStr = weekEndDate.toISOString().split('T')[0];
+        options.push({
+          value: `week-${weekNum}`,
+          label: `Week ${weekNum} (${startStr} - ${endStr})`
+        });
+      }
+      
+      weekStart = addDaysUTC(weekStart, 7);
+      weekNum++;
+    }
+    
+    return options;
+  }, []);
 
   // discover the user's team
   useEffect(() => {
@@ -71,7 +131,105 @@ export default function TeamPage() {
     })();
   }, [userId]);
 
-  async function loadMembersSummary(currentTeamId: string) {
+  // Reload members data when time period changes
+  useEffect(() => {
+    if (teamId) {
+      loadMembersSummary(teamId, selectedPeriod);
+      loadTeamSummary(teamId, selectedPeriod);
+    }
+  }, [teamId, selectedPeriod]);
+
+  async function loadTeamSummary(currentTeamId: string, timePeriod: string = "overall") {
+    // Determine date range based on time period
+    let startDate: string | null = null;
+    let endDate: string | null = null;
+    
+    if (timePeriod !== "overall") {
+      const currentYear = new Date().getUTCFullYear();
+      const seasonStart = firstWeekStart(currentYear);
+      const weekNum = parseInt(timePeriod.split('-')[1]);
+      const weekStart = addDaysUTC(seasonStart, (weekNum - 1) * 7);
+      const weekEnd = addDaysUTC(weekStart, 6);
+      
+      startDate = weekStart.toISOString().split('T')[0];
+      endDate = weekEnd.toISOString().split('T')[0];
+    }
+
+    // Fetch team members
+    const { data: teamUsers } = await getSupabase()
+      .from('accounts')
+      .select('id')
+      .eq('team_id', currentTeamId);
+    const memberIds = (teamUsers || []).map((u: { id: string }) => String(u.id));
+
+    // Fetch approved entries for team with date filter
+    let query = getSupabase()
+      .from('entries')
+      .select('user_id, type, date')
+      .eq('team_id', currentTeamId)
+      .eq('status', 'approved');
+    
+    if (startDate && endDate) {
+      query = query.gte('date', startDate).lte('date', endDate);
+    }
+    
+    const { data: entries } = await query;
+
+    // Calculate rest days
+    const restDays = (entries || []).filter((e: { type: string }) => e.type === 'rest').length;
+    setTeamRestDays(restDays);
+
+    // Calculate missed days
+    const memberSet = new Set(memberIds);
+    const byDateUser = new Set((entries || []).map((e: { date: string; user_id: string }) => `${String(e.date)}|${String(e.user_id)}`));
+    
+    let missed = 0;
+    let cur: Date;
+    let endDateCalc: Date;
+    
+    if (timePeriod === "overall") {
+      // Overall: from season start to today
+      cur = new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1));
+      endDateCalc = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+    } else {
+      // Weekly: from week start to week end (or today if current week)
+      const currentYear = new Date().getUTCFullYear();
+      const seasonStart = firstWeekStart(currentYear);
+      const weekNum = parseInt(timePeriod.split('-')[1]);
+      cur = addDaysUTC(seasonStart, (weekNum - 1) * 7);
+      const weekEnd = addDaysUTC(cur, 6);
+      endDateCalc = new Date(Math.min(weekEnd.getTime(), new Date().getTime()));
+    }
+    
+    while (cur.getTime() <= endDateCalc.getTime()) {
+      const ds = cur.toISOString().split('T')[0];
+      memberSet.forEach((uid) => { 
+        if (!byDateUser.has(`${ds}|${uid}`)) missed += 1; 
+      });
+      cur = new Date(cur.getTime() + 24 * 3600 * 1000);
+    }
+    
+    setTeamMissedDays(missed);
+  }
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownOpen) {
+        const target = event.target as Element;
+        if (!target.closest('.dropdown-container')) {
+          setDropdownOpen(false);
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [dropdownOpen]);
+
+  async function loadMembersSummary(currentTeamId: string, timePeriod: string = "overall") {
     // Fetch team members
     const { data: teamUsers } = await getSupabase()
       .from('accounts')
@@ -89,12 +247,33 @@ export default function TeamPage() {
       });
     });
 
-    // Fetch ALL approved entries for team (no date filter)
-    const { data: entries } = await getSupabase()
+    // Determine date range based on time period
+    let startDate: string | null = null;
+    let endDate: string | null = null;
+    
+    if (timePeriod !== "overall") {
+      const currentYear = new Date().getUTCFullYear();
+      const seasonStart = firstWeekStart(currentYear);
+      const weekNum = parseInt(timePeriod.split('-')[1]);
+      const weekStart = addDaysUTC(seasonStart, (weekNum - 1) * 7);
+      const weekEnd = addDaysUTC(weekStart, 6);
+      
+      startDate = weekStart.toISOString().split('T')[0];
+      endDate = weekEnd.toISOString().split('T')[0];
+    }
+
+    // Fetch approved entries for team with date filter
+    let query = getSupabase()
       .from('entries')
       .select('user_id, rr_value, type, date')
       .eq('team_id', currentTeamId)
       .eq('status', 'approved');
+    
+    if (startDate && endDate) {
+      query = query.gte('date', startDate).lte('date', endDate);
+    }
+    
+    const { data: entries } = await query;
 
     const rrAgg = new Map<string, { sum: number; count: number }>();
     (entries || []).forEach((e: { user_id: string; rr_value: number | null; type: string }) => {
@@ -122,9 +301,7 @@ export default function TeamPage() {
       }
     });
 
-    // Missed days since season start for each member
-    const seasonStart = new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1));
-    const today = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+    // Missed days calculation based on time period
     const datesByUser = new Map<string, Set<string>>();
     (entries || []).forEach((e: any) => {
       const ds = String(e.date);
@@ -133,11 +310,28 @@ export default function TeamPage() {
       set.add(ds);
       datesByUser.set(uid, set);
     });
+    
     memberMap.forEach((row, uid) => {
       let missed = 0;
-      let cur = new Date(seasonStart);
+      let cur: Date;
+      let endDate: Date;
+      
+      if (timePeriod === "overall") {
+        // Overall: from season start to today
+        cur = new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1));
+        endDate = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+      } else {
+        // Weekly: from week start to week end (or today if current week)
+        const currentYear = new Date().getUTCFullYear();
+        const seasonStart = firstWeekStart(currentYear);
+        const weekNum = parseInt(timePeriod.split('-')[1]);
+        cur = addDaysUTC(seasonStart, (weekNum - 1) * 7);
+        const weekEnd = addDaysUTC(cur, 6);
+        endDate = new Date(Math.min(weekEnd.getTime(), new Date().getTime()));
+      }
+      
       const set = datesByUser.get(uid) || new Set<string>();
-      while (cur.getTime() <= today.getTime()) {
+      while (cur.getTime() <= endDate.getTime()) {
         const ds = new Date(cur).toISOString().split('T')[0];
         if (!set.has(ds)) missed += 1;
         cur = new Date(cur.getTime() + 24 * 3600 * 1000);
@@ -157,7 +351,7 @@ export default function TeamPage() {
       .from('entries')
       .select('id', { count: 'exact', head: true })
       .eq('team_id', currentTeamId)
-      .eq('status', 'pending');
+      .eq('status', 'approved');
     setPendingCount(count || 0);
 
     // page data
@@ -165,7 +359,7 @@ export default function TeamPage() {
       .from('entries')
       .select('id,user_id,date,type,workout_type,duration,distance,steps,holes,rr_value,status,proof_url,accounts!inner(first_name)')
       .eq('team_id', currentTeamId)
-      .eq('status','pending')
+      .eq('status','approved')
       .order('date', { ascending: false })
       .range(from, to);
     const normalized = (pend || []).map((e: any) => ({
@@ -195,7 +389,7 @@ export default function TeamPage() {
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-rfl-navy mb-2">Team</h1>
-        <p className="text-gray-600">This week&apos;s approved points and average RR.</p>
+        <p className="text-gray-600">Team performance metrics and member statistics.</p>
       </div>
 
       <Card className="bg-white shadow-md mb-6">
@@ -204,14 +398,22 @@ export default function TeamPage() {
           <CardDescription>Points from approved entries only</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-8">
-            <div>
-              <div className="text-sm text-gray-600">Total Points</div>
-              <div className="text-2xl font-bold text-rfl-coral">{totals.pts}</div>
+          <div className="grid grid-cols-2 gap-3 text-center">
+            <div className="p-3 bg-rfl-peach/50 rounded">
+              <div className="text-xs text-gray-600">Points</div>
+              <div className="text-lg font-bold text-rfl-coral">{totals.pts}</div>
             </div>
-            <div>
-              <div className="text-sm text-gray-600">Avg RR</div>
-              <div className="text-2xl font-bold text-rfl-navy">{totals.rr}</div>
+            <div className="p-3 bg-rfl-peach/50 rounded">
+              <div className="text-xs text-gray-600">Avg RR</div>
+              <div className="text-lg font-bold text-rfl-navy">{totals.rr}</div>
+            </div>
+            <div className="p-3 bg-rfl-peach/50 rounded">
+              <div className="text-xs text-gray-600">Missed days</div>
+              <div className="text-lg font-bold text-rfl-navy">{teamMissedDays}</div>
+            </div>
+            <div className="p-3 bg-rfl-peach/50 rounded">
+              <div className="text-xs text-gray-600">Rest Days Taken</div>
+              <div className="text-lg font-bold text-rfl-navy">{teamRestDays}</div>
             </div>
           </div>
         </CardContent>
@@ -219,8 +421,41 @@ export default function TeamPage() {
 
       <Card className="bg-white shadow-md">
         <CardHeader>
-          <CardTitle className="text-xl text-rfl-navy">Members</CardTitle>
-          <CardDescription>Sorted by points & RR</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-xl text-rfl-navy">Members</CardTitle>
+              <CardDescription>Sorted by points & RR</CardDescription>
+            </div>
+            <div className="relative dropdown-container">
+              <button
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-rfl-coral focus:border-transparent"
+              >
+                <span>{dropdownOptions.find(opt => opt.value === selectedPeriod)?.label || "Overall"}</span>
+                <ChevronDown className="w-4 h-4" />
+              </button>
+              {dropdownOpen && (
+                <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-300 rounded-md shadow-lg z-10">
+                  <div className="py-1">
+                    {dropdownOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => {
+                          setSelectedPeriod(option.value);
+                          setDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
+                          selectedPeriod === option.value ? 'bg-rfl-coral/10 text-rfl-coral' : 'text-gray-700'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
@@ -264,10 +499,10 @@ export default function TeamPage() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-xl text-rfl-navy">Pending approvals</CardTitle>
-                  <CardDescription>Approve or reject all pending entries</CardDescription>
+                  <CardTitle className="text-xl text-rfl-navy">Submitted Entries</CardTitle>
+                  <CardDescription>View and manage submitted entries</CardDescription>
                 </div>
-                <div className="px-3 py-1 text-xs font-semibold rounded-full border bg-white whitespace-nowrap">Pending: {pendingCount}</div>
+                <div className="px-3 py-1 text-xs font-semibold rounded-full border bg-white whitespace-nowrap">Submitted: {pendingCount}</div>
               </div>
             </CardHeader>
             <CardContent>
@@ -288,40 +523,26 @@ export default function TeamPage() {
                       </div>
                       {/* Desktop action group */}
                       <div className="hidden sm:flex shrink-0 gap-2">
-                        {e.proof_url && (
-                          <button className="px-3 py-1 rounded border text-blue-700 border-blue-300 hover:bg-blue-50" onClick={()=> setPreviewEntry(e)}>View</button>
-                        )}
-                        <button className="px-3 py-1 rounded border text-green-700 border-green-300 hover:bg-green-50" onClick={async()=>{
-                          await getSupabase().from('entries').update({ status: 'approved' }).eq('id', e.id);
-                          setPending(p=>p.filter(x=>x.id!==e.id));
-                          if (teamId) { await loadMembersSummary(teamId); await loadPending(teamId, page); }
-                        }}>Approve</button>
+                        <button className="px-3 py-1 rounded border text-blue-700 border-blue-300 hover:bg-blue-50" onClick={()=> setPreviewEntry(e)}>View</button>
                         <button className="px-3 py-1 rounded border text-red-700 border-red-300 hover:bg-red-50" onClick={async()=>{
                           await getSupabase().from('entries').update({ status: 'rejected' }).eq('id', e.id);
                           setPending(p=>p.filter(x=>x.id!==e.id));
                           if (teamId) { await loadMembersSummary(teamId); await loadPending(teamId, page); }
-                        }}>Reject</button>
+                        }}>Don't Accept</button>
                       </div>
                     </div>
                     {/* Mobile action row */}
                     <div className="mt-2 flex sm:hidden gap-2">
-                      {e.proof_url && (
-                        <button className="flex-1 py-2 rounded border text-blue-700 border-blue-300 hover:bg-blue-50" onClick={()=> setPreviewEntry(e)}>View</button>
-                      )}
-                      <button className="flex-1 py-2 rounded border text-green-700 border-green-300 hover:bg-green-50" onClick={async()=>{
-                        await getSupabase().from('entries').update({ status: 'approved' }).eq('id', e.id);
-                        setPending(p=>p.filter(x=>x.id!==e.id));
-                        if (teamId) { await loadMembersSummary(teamId); await loadPending(teamId, page); }
-                      }}>Approve</button>
+                      <button className="flex-1 py-2 rounded border text-blue-700 border-blue-300 hover:bg-blue-50" onClick={()=> setPreviewEntry(e)}>View</button>
                       <button className="flex-1 py-2 rounded border text-red-700 border-red-300 hover:bg-red-50" onClick={async()=>{
                         await getSupabase().from('entries').update({ status: 'rejected' }).eq('id', e.id);
                         setPending(p=>p.filter(x=>x.id!==e.id));
                         if (teamId) { await loadMembersSummary(teamId); await loadPending(teamId, page); }
-                      }}>Reject</button>
+                      }}>Don't Accept</button>
                     </div>
                   </div>
                 ))}
-                {!pending.length && <div className="text-gray-600">No pending entries.</div>}
+                {!pending.length && <div className="text-gray-600">No submitted entries.</div>}
               </div>
 
               {/* Pagination */}
@@ -373,27 +594,6 @@ export default function TeamPage() {
           </div>
         )}
 
-          {pendingCount > 0 && (
-            <div className="mt-4">
-              <button className="px-4 py-2 rounded bg-rfl-coral text-white" onClick={async()=>{
-                const ok = window.confirm('Approve all pending entries for the team?');
-                if (!ok) return;
-                if (!teamId) return;
-                // Approve ALL pending for the team (not just the page)
-                const { data: allIds } = await getSupabase()
-                  .from('entries')
-                  .select('id')
-                  .eq('team_id', teamId)
-                  .eq('status','pending');
-                const ids = (allIds || []).map((x:any)=>x.id);
-                if (ids.length) {
-                  await getSupabase().from('entries').update({ status: 'approved' }).in('id', ids);
-                }
-                await loadMembersSummary(teamId);
-                await loadPending(teamId, page);
-              }}>Approve all</button>
-            </div>
-          )}
         </>
       )}
     </div>

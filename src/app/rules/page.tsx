@@ -79,7 +79,7 @@ export default function RulesPage() {
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-green-500" />
-                <span><strong>Racket Sports</strong> (Badminton, Tennis, Pickle Ball etc.) — 45 mins</span>
+                <span><strong>Field Sports</strong> (Badminton, Tennis, Pickleball, etc.) — 45 mins</span>
               </div>
               <div className="flex items-center gap-2">
                 <CheckCircle className="w-4 h-4 text-green-500" />
@@ -226,7 +226,7 @@ export default function RulesPage() {
             <div className="space-y-2 text-sm">
               <div><strong>Workout Duration:</strong> 45 mins workout = RR 1.0 | 60 mins workout = RR 1.33</div>
               <div><strong>Steps:</strong> 10,000 steps = RR 1.0 | 18,000 steps = RR 1.8</div>
-              <div><strong>Golf:</strong> Golf 9 holes = RR 1.0 | 18 holes = RR 2.0</div>
+              <div><strong>Golf:</strong> Golf 9 holes = RR 1.0 | 18 holes = RR 2.0 | 22+ holes = RR 2.5</div>
             </div>
           </div>
         </CardContent>

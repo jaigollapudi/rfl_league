@@ -3,10 +3,18 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useEffect, useMemo, useState } from "react";
 import { getSupabase } from "@/lib/supabase";
-import LeagueStandings, { LeagueTeam } from "../(app)/dashboard/LeagueStandings";
 
 type TeamRow = { team_id: string; team_name: string; points: number; avg_rr: number | null };
 type PlayerRow = { user_id: string; name: string; team: string | null; points: number; avg_rr: number | null };
+
+type TeamStanding = {
+  teamId: string;
+  teamName: string;
+  points: number;
+  avgRR: number;
+  position: number; // 1-based
+  delta: number; // position change vs previous day within the selected period (negative means moved up)
+};
 
 export default function LeaderboardsPage() {
   const [teams, setTeams] = useState<TeamRow[]>([]);
@@ -14,6 +22,7 @@ export default function LeaderboardsPage() {
   const [playersTotal, setPlayersTotal] = useState<number>(0);
   const [page, setPage] = useState(1);
   const pageSize = 10;
+  const [dropdownOpen, setDropdownOpen] = useState(false);
 
   // Fetch leaderboards (existing)
   useEffect(() => {
@@ -53,87 +62,91 @@ export default function LeaderboardsPage() {
     })();
   }, [page]);
 
-  // Build standings + bars: simplified using direct per-team aggregation matching Team page
-  const [standings, setStandings] = useState<LeagueTeam[]>([]);
+  // Utilities for period boundaries
+  const seasonStartDate = useMemo(() => new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1)), []); // Sep 1 UTC of current year
+  const todayUtc = () => new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+  const ymd = (d: Date) => d.toISOString().split('T')[0];
+  const addDaysUTC = (d: Date, n: number) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + n));
+
+  // Period dropdown options (Overall + completed/in-progress weeks)
+  const periodOptions = useMemo(() => {
+    const opts: Array<{ value: string; label: string; start: Date; end: Date }> = [];
+    const start = seasonStartDate;
+    const today = todayUtc();
+    opts.push({ value: 'overall', label: 'Overall', start, end: today });
+    // Build week ranges starting at seasonStartDate in 7-day buckets
+    let wkStart = new Date(start);
+    let weekNum = 1;
+    while (wkStart <= today) {
+      const wkEnd = addDaysUTC(wkStart, 6);
+      const shownEnd = wkEnd <= today ? wkEnd : today;
+      const label = `Week ${weekNum} (${wkStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${shownEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`;
+      opts.push({ value: `week-${weekNum}`, label, start: new Date(wkStart), end: shownEnd });
+      wkStart = addDaysUTC(wkStart, 7);
+      weekNum++;
+    }
+    return opts;
+  }, [seasonStartDate]);
+
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('overall');
+  const currentPeriod = periodOptions.find(o => o.value === selectedPeriod) || periodOptions[0];
+
+  // Standings table for selected period + position change vs previous day
+  const [standings, setStandings] = useState<TeamStanding[]>([]);
   useEffect(() => {
     (async () => {
-      const start = new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1));
-      const today = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-      const seasonStart = start.toISOString().split('T')[0];
-      const seasonEnd = today.toISOString().split('T')[0];
+      const start = currentPeriod.start;
+      const end = currentPeriod.end;
+      const prevEnd = ymd(end) === ymd(start) ? null : addDaysUTC(end, -1);
 
-      // Fetch all teams
+      // Fetch teams
       const { data: allTeams } = await getSupabase().from('teams').select('id, name');
       const teams = (allTeams || []) as Array<{ id: string; name: string }>;
 
-      const standingsData: LeagueTeam[] = [];
-      for (const team of teams) {
-        const tid = String(team.id);
-
-        // Roster size
-        const { count: rosterSize } = await getSupabase()
-          .from('accounts')
-          .select('id', { count: 'exact', head: true })
-          .eq('team_id', tid);
-        const roster = rosterSize || 0;
-
-        // Approved entries with user_id
-        const { data: entries } = await getSupabase()
-          .from('entries')
-          .select('type, rr_value, date, user_id')
-          .eq('team_id', tid)
-          .eq('status', 'approved')
-          .gte('date', seasonStart)
-          .lte('date', seasonEnd);
-        const ents = (entries || []) as Array<{ type: string; rr_value: number | null; date: string; user_id: string }>;
-
-        // Points: workout=1, rest=1 only if RR>0
-        let pts = 0; let rrSum = 0; let rrCnt = 0; let restUsed = 0;
-        ents.forEach(e => {
-          const rr = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
-          const isRest = String(e.type) === 'rest';
-          if (isRest && rr > 0) pts += 1;
-          else if (!isRest) pts += 1;
-          if (rr > 0) { rrSum += rr; rrCnt += 1; }
-          if (isRest) restUsed += 1;
-        });
-        const avgRR = rrCnt > 0 ? Math.round((rrSum / rrCnt) * 100) / 100 : 0;
-
-        // Missed days: per day, check if all members have entry
-        const byDateUsers = new Map<string, Set<string>>();
-        ents.forEach(e => {
-          const ds = String(e.date); const uid = String(e.user_id);
-          const s = byDateUsers.get(ds) || new Set<string>();
-          s.add(uid);
-          byDateUsers.set(ds, s);
-        });
-        let missed = 0; let cur = new Date(start);
-        while (cur.getTime() <= today.getTime()) {
-          const ds = cur.toISOString().split('T')[0];
-          const present = byDateUsers.get(ds)?.size || 0;
-          if (roster > 0 && present < roster) missed += 1;
-          cur = new Date(cur.getTime() + 24 * 3600 * 1000);
+      // Helper to compute standings within [s, e]
+      const compute = async (s: Date, e: Date): Promise<Array<Omit<TeamStanding, 'position' | 'delta'>>> => {
+        const res: Array<Omit<TeamStanding, 'position' | 'delta'>> = [];
+        for (const team of teams) {
+          const tid = String(team.id);
+          const { data: entries } = await getSupabase()
+            .from('entries')
+            .select('type, rr_value, date')
+            .eq('team_id', tid)
+            .eq('status', 'approved')
+            .gte('date', ymd(s))
+            .lte('date', ymd(e));
+          const ents = (entries || []) as Array<{ type: string; rr_value: number | null }>;        
+          let pts = 0; let rrSum = 0; let rrCnt = 0;
+          ents.forEach(e2 => {
+            const rr = typeof e2.rr_value === 'number' ? e2.rr_value : Number(e2.rr_value || 0);
+            const isRest = String(e2.type) === 'rest';
+            if (isRest && rr > 0) pts += 1; else if (!isRest) pts += 1;
+            if (rr > 0) { rrSum += rr; rrCnt += 1; }
+          });
+          const avgRR = rrCnt > 0 ? Math.round((rrSum / rrCnt) * 100) / 100 : 0;
+          res.push({ teamId: tid, teamName: String(team.name), points: pts, avgRR });
         }
+        // sort
+        res.sort((a,b)=> (b.points - a.points) || (b.avgRR - a.avgRR));
+        return res;
+      };
 
-        standingsData.push({
-          teamId: tid,
-          teamName: String(team.name),
-          points: pts,
-          missedDays: missed,
-          avgRR,
-          restUsed,
-        });
-      }
-      standingsData.sort((a,b)=> {
-        const byPoints = b.points - a.points;
-        if (byPoints !== 0) return byPoints;
-        const aRR = typeof a.avgRR === 'number' ? a.avgRR : 0;
-        const bRR = typeof b.avgRR === 'number' ? b.avgRR : 0;
-        return bRR - aRR; // tie-breaker: higher RR first
+      const curr = await compute(start, end);
+      const prev = prevEnd ? await compute(start, prevEnd) : null;
+
+      // map to positions and deltas
+      const posByIdPrev = new Map<string, number>();
+      if (prev) prev.forEach((t, idx) => posByIdPrev.set(t.teamId, idx + 1));
+      const withMeta: TeamStanding[] = curr.map((t, idx) => {
+        const prevPos = posByIdPrev.get(t.teamId);
+        const position = idx + 1;
+        const delta = typeof prevPos === 'number' ? position - prevPos : 0; // positive means moved down
+        return { ...t, position, delta };
       });
-      setStandings(standingsData);
+      setStandings(withMeta);
     })();
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedPeriod]);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -145,32 +158,84 @@ export default function LeaderboardsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="bg-white shadow-md">
           <CardHeader>
-            <CardTitle className="text-xl text-rfl-navy">Teams</CardTitle>
-            <CardDescription>Team Standings</CardDescription>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-xl text-rfl-navy">Teams</CardTitle>
+                <CardDescription>Standings table</CardDescription>
+              </div>
+              <div className="relative dropdown-container">
+                <button
+                  onClick={() => setDropdownOpen((v)=>!v)}
+                  className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-rfl-coral focus:border-transparent"
+                >
+                  <span>{periodOptions.find(opt => opt.value === selectedPeriod)?.label || 'Overall'}</span>
+                  <span className="text-gray-500">▾</span>
+                </button>
+                {dropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-300 rounded-md shadow-lg z-10">
+                    <div className="py-1 max-h-80 overflow-auto">
+                      {periodOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => { setSelectedPeriod(option.value); setDropdownOpen(false); }}
+                          className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${selectedPeriod === option.value ? 'bg-rfl-coral/10 text-rfl-coral' : 'text-gray-700'}`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            {/* Rank cards + bars */}
-            {standings.length ? (
-              <div className="space-y-3 mb-6">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {standings.slice(0,3).map((t, idx) => (
-                    <div key={t.teamId} className="p-4 rounded border bg-white flex flex-col items-center text-center">
-                      <div className="text-sm text-gray-700">{idx===0?'🥇 Rank 1': idx===1?'🥈 Rank 2':'🥉 Rank 3'}</div>
-                      <div className="text-base font-semibold text-rfl-navy mt-1 whitespace-nowrap">{t.teamName}</div>
-                      <div className="text-3xl font-bold text-rfl-coral mt-2">{t.points}</div>
-                      <div className="text-xs text-gray-600 mt-1 flex gap-3">
-                        <span><b>Missed days:</b> {t.missedDays}</span>
-                        <span>|</span>
-                        <span><b>Avg RR:</b> {typeof t.avgRR === 'number' ? t.avgRR.toFixed(2) : '0.00'}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <LeagueStandings teams={standings} />
-              </div>
-            ) : null}
-
-            {/* Old teams list removed per request */}
+            <div className="overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="text-left text-gray-600">
+                  <tr>
+                    <th className="py-2 pr-2 text-xs font-semibold w-12">Pos</th>
+                    <th className="py-2 pr-2 text-xs font-semibold">Team</th>
+                    <th className="py-2 pr-2 text-xs font-semibold text-right w-16">Pts</th>
+                    <th className="py-2 pr-2 text-xs font-semibold text-right w-16">Avg RR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {standings.map((t) => {
+                    // Convert team name to logo filename format
+                    const logoName = t.teamName
+                      .replace(/\s+/g, '_')
+                      .replace(/[^a-zA-Z0-9_]/g, '') + '_Logo.jpeg';
+                    const logoPath = `/img/${logoName}`;
+                    
+                    return (
+                      <tr key={t.teamId} className="border-t hover:bg-gray-50">
+                        <td className="py-2 pr-2 [font-variant-numeric:tabular-nums] font-bold text-rfl-navy text-sm w-12">{t.position}</td>
+                        <td className="py-2 pr-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <img 
+                              src={logoPath} 
+                              alt={`${t.teamName} logo`} 
+                              className="w-6 h-6 rounded border border-gray-200 object-cover flex-shrink-0"
+                              onError={(e) => {
+                                // Fallback to placeholder if logo doesn't exist
+                                (e.target as HTMLImageElement).src = '/img/placeholder-team.svg';
+                              }}
+                            />
+                            <span className="font-medium text-rfl-navy text-sm truncate">{t.teamName}</span>
+                          </div>
+                        </td>
+                        <td className="py-2 pr-2 text-right [font-variant-numeric:tabular-nums] font-bold text-rfl-coral text-sm w-16">{t.points}</td>
+                        <td className="py-2 pr-2 text-right [font-variant-numeric:tabular-nums] font-semibold text-rfl-navy text-sm w-16">{t.avgRR.toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
+                  {!standings.length && (
+                    <tr><td colSpan={4} className="py-8 text-gray-600 text-center text-sm">No data yet.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </CardContent>
         </Card>
 

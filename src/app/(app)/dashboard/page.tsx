@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Calendar, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { getSupabase } from "@/lib/supabase";
@@ -99,10 +99,16 @@ const ACTIVITY_CONFIGS: Record<string, ActivityConfig> = {
     rules: ["45 mins minimum"],
     minDuration: 45,
   },
-  racket: {
-    name: "Racket Sports",
+  field: {
+    name: "Field Sports",
     fields: ['duration'],
     rules: ["45 mins minimum"],
+    minDuration: 45,
+  },
+  meditation: {
+    name: "Meditation/Chanting/Breathing",
+    fields: ['duration'],
+    rules: ["30–45 mins minimum (30 for seniors)"],
     minDuration: 45,
   },
   steps: {
@@ -123,6 +129,7 @@ const ACTIVITY_CONFIGS: Record<string, ActivityConfig> = {
 export default function DashboardPage() {
   const { data: session } = useSession();
   const userId = session?.user?.id;
+  const [isSenior, setIsSenior] = useState<boolean>(false);
 
   const [openWorkout, setOpenWorkout] = useState(false);
   const [openRest, setOpenRest] = useState(false);
@@ -147,6 +154,10 @@ export default function DashboardPage() {
   const [weekRestDays, setWeekRestDays] = useState<number>(0);
   const [teamMissedWeek, setTeamMissedWeek] = useState<number>(0);
   const [teamRestWeek, setTeamRestWeek] = useState<number>(0);
+  const [myPoints, setMyPoints] = useState<number>(0);
+  const [myAvgRR, setMyAvgRR] = useState<number | null>(null);
+  const [myMissedDays, setMyMissedDays] = useState<number>(0);
+  const [myRestUsed, setMyRestUsed] = useState<number>(0);
   const [viewWeekStart, setViewWeekStart] = useState<Date>(() => {
     const now = new Date();
     const y = now.getUTCFullYear();
@@ -160,6 +171,8 @@ export default function DashboardPage() {
   });
 
   const currentConfig = ACTIVITY_CONFIGS[activity];
+  const sessionAge = (session?.user as any)?.age as number | undefined;
+  const isSeniorEffective = (typeof sessionAge === 'number' && sessionAge >= 65) || isSenior;
   const PROOF_BUCKET = (process.env.NEXT_PUBLIC_PROOF_BUCKET as string) || 'rofl_proof_pics';
   
 
@@ -168,8 +181,9 @@ export default function DashboardPage() {
     const config = ACTIVITY_CONFIGS[activity];
 
     if (activity === "steps") {
-      if (!steps || Number(steps) < (config.minSteps || 0)) {
-        return { valid: false, error: `Minimum ${config.minSteps?.toLocaleString()} steps required` };
+      const minSteps = isSeniorEffective ? 5000 : (config.minSteps || 0);
+      if (!steps || Number(steps) < minSteps) {
+        return { valid: false, error: `Minimum ${minSteps.toLocaleString()} steps required` };
       }
       return { valid: true, error: "" };
     }
@@ -190,7 +204,8 @@ export default function DashboardPage() {
 
     const durationProvided = duration !== "" && duration !== null && Number(duration) > 0;
     const distanceProvided = distance !== "" && distance !== null && Number(distance) > 0;
-    const durationValid = durationProvided && Number(duration) >= (config.minDuration || 0);
+    const minDur = isSeniorEffective ? 30 : (config.minDuration || 0);
+    const durationValid = durationProvided && Number(duration) >= minDur;
     const distanceValid = distanceProvided && Number(distance) >= (config.minDistance || 0);
 
     if (config.fields.includes('distance') && config.minDistance) {
@@ -198,11 +213,11 @@ export default function DashboardPage() {
         return { valid: false, error: "Please provide only one: Duration OR Distance" };
       }
       if (!durationValid && !distanceValid) {
-        return { valid: false, error: `Minimum ${config.minDuration} mins OR ${config.minDistance} kms required` };
+        return { valid: false, error: `Minimum ${minDur} mins OR ${config.minDistance} kms required` };
       }
     } else {
       if (!durationValid) {
-        return { valid: false, error: `Minimum ${config.minDuration} mins required` };
+        return { valid: false, error: `Minimum ${minDur} mins required` };
       }
     }
 
@@ -253,17 +268,19 @@ export default function DashboardPage() {
     fetchActivity(viewWeekStart);
     (async () => {
       if (!userId) return;
-      // Fetch user's team id and name
+      // Fetch user's team id, age and name
       const { data: acct } = await getSupabase()
         .from('accounts')
-        .select('team_id, teams(name)')
+        .select('team_id, age, teams(name)')
         .eq('id', userId)
         .maybeSingle();
-      type Acct = { team_id: string | null; teams?: { name?: string } | null } | null;
+      type Acct = { team_id: string | null; age: number | null; teams?: { name?: string } | null } | null;
       const tId = (acct as Acct)?.team_id || null;
       const tName = (acct as Acct)?.teams?.name || "";
       setTeamId(tId);
       setTeamName(tName || "");
+      const ageVal = (acct as Acct)?.age ?? null;
+      setIsSenior(typeof ageVal === 'number' && ageVal >= 65);
 
       // Fetch rest day count
       const { count } = await getSupabase()
@@ -317,7 +334,50 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, viewWeekStart]);
 
-  // Compute Team weekly summary (approved entries only) for current week
+  // Load individual overall stats (season-to-date)
+  useEffect(() => {
+    (async () => {
+      if (!userId) return;
+      const seasonStart = new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1)); // Sept 1
+      const today = new Date();
+      const seasonStartStr = seasonStart.toISOString().split('T')[0];
+      const todayStr = today.toISOString().split('T')[0];
+
+      // Fetch all my approved entries for the season
+      const { data: myEntries } = await getSupabase()
+        .from('entries')
+        .select('type, rr_value, date')
+        .eq('user_id', userId)
+        .eq('status', 'approved')
+        .gte('date', seasonStartStr)
+        .lte('date', todayStr);
+
+      const entries = (myEntries || []) as Array<{ type: string; rr_value: number | null; date: string }>;
+
+      // Calculate my stats
+      const points = entries.length; // every approved entry counts 1
+      const rrVals = entries.map(e => (typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0))).filter(v => v > 0);
+      const avgRR = rrVals.length ? Math.round((rrVals.reduce((a,b)=>a+b,0)/rrVals.length)*100)/100 : null;
+      const restUsed = entries.filter(e => String(e.type) === 'rest').length;
+
+      // Calculate missed days (days from season start to today with no entry)
+      const byDate = new Set(entries.map(e => String(e.date)));
+      let missed = 0;
+      let cur = new Date(seasonStart);
+      while (cur.getTime() <= today.getTime()) {
+        const ds = cur.toISOString().split('T')[0];
+        if (!byDate.has(ds)) missed += 1;
+        cur = new Date(cur.getTime() + 24 * 3600 * 1000);
+      }
+
+      setMyPoints(points);
+      setMyAvgRR(avgRR);
+      setMyMissedDays(missed);
+      setMyRestUsed(restUsed);
+    })();
+  }, [userId]);
+
+  // Compute Team overall summary (approved entries only) for season-to-date
   useEffect(() => {
     (async () => {
       let effectiveTeamId = teamId;
@@ -331,50 +391,53 @@ export default function DashboardPage() {
         if (effectiveTeamId) setTeamId(effectiveTeamId);
       }
       if (!effectiveTeamId) return;
-      const ws = viewWeekStart;
-      const we = new Date(ws); we.setUTCDate(ws.getUTCDate() + 6);
-      const todayOnly = new Date();
-      // clamp end date to today to avoid future-day counting
-      const lastDay = new Date(Math.min(we.getTime(), Date.UTC(todayOnly.getUTCFullYear(), todayOnly.getUTCMonth(), todayOnly.getUTCDate())));
+      
+      const seasonStart = new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1)); // Sept 1
+      const today = new Date();
+      const seasonStartStr = seasonStart.toISOString().split('T')[0];
+      const todayStr = today.toISOString().split('T')[0];
+      
       // Fetch team members
       const { data: teamUsers } = await getSupabase()
         .from('accounts')
         .select('id')
         .eq('team_id', effectiveTeamId);
       const memberIds = ((teamUsers || []) as Array<{ id: string }>).map((u)=> String(u.id));
-      // Fetch all approved entries for the team for this week
+      
+      // Fetch all approved entries for the team for the season
       const { data } = await getSupabase()
         .from('entries')
         .select('id, user_id, date, type, rr_value')
         .eq('team_id', effectiveTeamId)
         .eq('status', 'approved')
-        .gte('date', formatDateYYYYMMDD(ws))
-        .lte('date', formatDateYYYYMMDD(lastDay));
+        .gte('date', seasonStartStr)
+        .lte('date', todayStr);
       const entries = (data || []) as Array<{ id: string; user_id: string; date: string; type: string | null; rr_value: number | null }>;
       const teamPts = entries.length; // every approved entry counts 1
       const rrVals = entries.map(e => (typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0))).filter(v => v > 0);
       const teamRR = rrVals.length ? Math.round((rrVals.reduce((a,b)=>a+b,0)/rrVals.length)*100)/100 : null;
       // Team rest days (approved)
-      const restWeek = entries.filter(e => String(e.type) === 'rest').length;
-      // Team missed days: per member per day with no entry
+      const restUsed = entries.filter(e => String(e.type) === 'rest').length;
+      
+      // Team missed days: per member per day with no entry from season start to today
       const memberSet = new Set(memberIds);
       const byDateUser = new Set(entries.map(e => `${String(e.date)}|${String(e.user_id)}`));
       let missed = 0;
       {
-        let day = new Date(ws);
-        while (day.getTime() <= lastDay.getTime()) {
-          const ds = formatDateYYYYMMDD(day);
+        let day = new Date(seasonStart);
+        while (day.getTime() <= today.getTime()) {
+          const ds = day.toISOString().split('T')[0];
           memberSet.forEach((uid)=>{ if (!byDateUser.has(`${ds}|${uid}`)) missed += 1; });
-          day.setUTCDate(day.getUTCDate()+1);
+          day = new Date(day.getTime() + 24 * 3600 * 1000);
         }
       }
       setTeamPoints(teamPts);
       setTeamAvgRR(teamRR);
-      setTeamRestWeek(restWeek);
+      setTeamRestWeek(restUsed);
       setTeamMissedWeek(missed);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamId, viewWeekStart, userId]);
+  }, [teamId, userId]);
 
   // Removed league-wide standings from dashboard (moved to leaderboards page)
 
@@ -424,7 +487,7 @@ export default function DashboardPage() {
         proofUrl = pub?.publicUrl || null;
       }
 
-      // 2) Save workout entry with proof URL as pending for leader approval
+      // 2) Save workout entry with proof URL as approved (auto-approved)
       await getSupabase().rpc("rfl_upsert_workout", {
         p_user_id: userId,
         p_date: date,
@@ -435,13 +498,15 @@ export default function DashboardPage() {
         p_steps: steps === "" ? null : Number(steps),
         p_holes: holes === "" ? null : Number(holes),
         p_proof_url: proofUrl,
-        p_status: "pending",
+        p_status: "approved",
       });
       setOpenWorkout(false);
       setValidationError("");
       setProofError("");
       setProofFile(null);
       await fetchActivity(viewWeekStart);
+      // Refresh individual stats after saving
+      window.location.reload();
     } finally {
       setLoading(false);
     }
@@ -457,9 +522,8 @@ export default function DashboardPage() {
       await getSupabase().rpc('rfl_upsert_rest_day', { p_user_id: userId, p_date: date, p_team_id: null, p_status: 'approved' });
       setOpenRest(false);
       await fetchActivity(viewWeekStart);
-      const { count } = await getSupabase().from('entries').select('id', { count: 'exact', head: true })
-        .eq('user_id', userId).eq('type','rest').eq('status','approved');
-      setRestUsed(count || 0);
+      // Refresh individual stats after saving
+      window.location.reload();
     } finally { setLoading(false); }
   }
 
@@ -479,74 +543,70 @@ export default function DashboardPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-rfl-navy mb-2">Dashboard</h1>
+        <h1 className="text-3xl font-bold text-rfl-navy mb-2">My Dashboard</h1>
         <p className="text-gray-600">Track your workouts and rest days.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Plus className="w-5 h-5 text-rfl-coral" /> Add Activity</CardTitle>
+            <CardTitle className="flex items-center gap-2"><TrendingUp className="w-5 h-5 text-rfl-coral" /> League Progression</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 divide-x divide-gray-200">
-              <div className="pr-4 flex flex-col items-center">
-                <Button className="bg-rfl-coral hover:bg-rfl-coral/90 mb-4" onClick={() => { setDate(todayStr()); setOpenWorkout(true); }}>Log Workout</Button>
-                <div className="text-xs text-gray-600 space-y-1.5 w-full">
-                  <div className="font-semibold text-rfl-navy mb-2">Approved Workouts:</div>
-                  <div>• Walk/Jog/Run: 4 km OR 45 min</div>
-                  <div>• Gym: 45 min</div>
-                  <div>• Yoga/Pilates/Zumba: 45 min</div>
-                  <div>• Cycling: 10 km OR 45 min</div>
-                  <div>• Swimming: 45 min</div>
-                  <div>• Steps: 10,000 steps</div>
-                  <div>• Golf: 9 holes (8000+ steps)</div>
+            {/* Action buttons */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <Button className="bg-rfl-coral hover:bg-rfl-coral/90" onClick={() => { setDate(todayStr()); setOpenWorkout(true); }}>Log Workout</Button>
+              <Button variant="outline" className="border-rfl-navy text-rfl-navy hover:bg-rfl-navy/10" onClick={() => { setDate(todayStr()); setOpenRest(true); }}>Log Rest Day</Button>
+            </div>
+
+            {/* My Summary mini card on top */}
+            <div className="rounded-lg border bg-white p-4 mb-4">
+              <div className="text-sm font-semibold text-rfl-navy mb-2">My Summary</div>
+              <div className="grid grid-cols-2 gap-3 text-center">
+                <div className="p-3 bg-rfl-peach/50 rounded">
+                  <div className="text-xs text-gray-600">Points</div>
+                  <div className="text-lg font-bold text-rfl-coral">{myPoints}</div>
                 </div>
-              </div>
-              <div className="pl-4 flex flex-col items-center justify-start">
-                <Button variant="outline" className="border-rfl-navy text-rfl-navy hover:bg-rfl-navy/10 mb-4" onClick={() => { setDate(todayStr()); setOpenRest(true); }}>Log Rest Day</Button>
-                <div className="text-center space-y-3 w-full">
-                  <div className="p-3 bg-blue-50 rounded-lg">
-                    <div className="text-sm text-gray-600">Rest Days Remaining</div>
-                    <div className="text-2xl font-bold text-rfl-navy">{Math.max(0, 18 - restUsed)} / 18</div>
-                  </div>
-                  <div className="text-xs text-gray-600 space-y-1">
-                    <div className="font-semibold text-rfl-navy">This Week:</div>
-                    <div>Points: <span className="font-semibold text-rfl-coral">{rows.reduce((a,r)=>a+(r.points||0),0)}</span></div>
-                    <div>Avg RR: <span className="font-semibold text-rfl-navy">{(() => { const rr = rows.map(r=>r.rr_value||0).filter(v=>v>0); return rr.length ? (Math.round((rr.reduce((a,b)=>a+b,0)/rr.length)*100)/100).toFixed(2) : '0.00'; })()}</span></div>
-                    <div>Rest Days: <span className="font-semibold text-rfl-navy">{weekRestDays}</span></div>
-                  </div>
+                <div className="p-3 bg-rfl-peach/50 rounded">
+                  <div className="text-xs text-gray-600">Avg RR</div>
+                  <div className="text-lg font-bold text-rfl-navy">{myAvgRR !== null ? Number(myAvgRR).toFixed(2) : '—'}</div>
+                </div>
+                <div className="p-3 bg-rfl-peach/50 rounded">
+                  <div className="text-xs text-gray-600">Missed days</div>
+                  <div className="text-lg font-bold text-rfl-navy">{myMissedDays}</div>
+                </div>
+                <div className="p-3 bg-rfl-peach/50 rounded">
+                  <div className="text-xs text-gray-600">Rest Days Remaining</div>
+                  <div className="text-lg font-bold text-rfl-navy">{Math.max(0, 18 - myRestUsed)} / 18</div>
                 </div>
               </div>
             </div>
-            {/* Team Summary full-width beneath the two halves */}
-            <div className="mt-6">
-              <div className="rounded-lg border bg-white p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-sm font-semibold text-rfl-navy">Team Summary {teamName ? `— ${teamName}` : ''}</div>
-                  {teamPosition ? (
-                    <div className="text-xs px-2 py-0.5 rounded-full bg-rfl-coral text-white">Position #{teamPosition}</div>
-                  ) : null}
+            
+            {/* Team Summary mini card on bottom */}
+            <div className="rounded-lg border bg-white p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-semibold text-rfl-navy">Team Summary {teamName ? `— ${teamName}` : ''}</div>
+                {teamPosition ? (
+                  <div className="text-xs px-2 py-0.5 rounded-full bg-rfl-coral text-white">Position #{teamPosition}</div>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-center">
+                <div className="p-3 bg-rfl-peach/50 rounded">
+                  <div className="text-xs text-gray-600">Points</div>
+                  <div className="text-lg font-bold text-rfl-coral">{teamPoints ?? '—'}</div>
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-center">
-                  <div className="p-3 bg-rfl-peach/50 rounded">
-                    <div className="text-xs text-gray-600">Points (week)</div>
-                    <div className="text-lg font-bold text-rfl-coral">{teamPoints ?? '—'}</div>
-                  </div>
-                  <div className="p-3 bg-rfl-peach/50 rounded">
-                    <div className="text-xs text-gray-600">Avg RR</div>
-                    <div className="text-lg font-bold text-rfl-navy">{teamAvgRR !== null ? Number(teamAvgRR).toFixed(2) : '—'}</div>
-                  </div>
-                  <div className="p-3 bg-rfl-peach/50 rounded">
-                    <div className="text-xs text-gray-600">Missed days (week)</div>
-                    <div className="text-lg font-bold text-rfl-navy">{teamMissedWeek}</div>
-                  </div>
-                  <div className="p-3 bg-rfl-peach/50 rounded">
-                    <div className="text-xs text-gray-600">Rest days (week)</div>
-                    <div className="text-lg font-bold text-rfl-navy">{teamRestWeek}</div>
-                  </div>
+                <div className="p-3 bg-rfl-peach/50 rounded">
+                  <div className="text-xs text-gray-600">Avg RR</div>
+                  <div className="text-lg font-bold text-rfl-navy">{teamAvgRR !== null ? Number(teamAvgRR).toFixed(2) : '—'}</div>
                 </div>
-                {/* League standings moved to /leaderboards page */}
+                <div className="p-3 bg-rfl-peach/50 rounded">
+                  <div className="text-xs text-gray-600">Missed days</div>
+                  <div className="text-lg font-bold text-rfl-navy">{teamMissedWeek}</div>
+                </div>
+                <div className="p-3 bg-rfl-peach/50 rounded">
+                  <div className="text-xs text-gray-600">Rest Days Taken</div>
+                  <div className="text-lg font-bold text-rfl-navy">{teamRestWeek}</div>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -593,12 +653,12 @@ export default function DashboardPage() {
                     </div>
                     <div className="text-right">
                       <div className="font-semibold text-rfl-coral">{r.points ?? 0} pt</div>
-                      {r?.status && (
-                        <div className={`text-xs inline-block mt-1 px-2 py-0.5 rounded-full ${
-                          r.status === 'approved' ? 'bg-green-100 text-green-800' :
-                          r.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                        }`}>{r.status}</div>
-                      )}
+                       {r?.status && (
+                         <div className={`text-xs inline-block mt-1 px-2 py-0.5 rounded-full ${
+                           r.status === 'approved' ? 'bg-blue-100 text-blue-800' :
+                           r.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                         }`}>{r.status === 'approved' ? 'submitted' : r.status}</div>
+                       )}
                     </div>
                   </summary>
                   {/* Detail content */}
@@ -651,9 +711,10 @@ export default function DashboardPage() {
                 <option value="yoga">Yoga/Pilates/Zumba</option>
                 <option value="cycling">Cycling</option>
                 <option value="swimming">Swimming</option>
-                <option value="racket">Racket Sports</option>
+                <option value="field">Field Sports</option>
                 <option value="steps">Steps</option>
                 <option value="golf">Golf</option>
+                {isSeniorEffective && <option value="meditation">Meditation/Chanting/Breathing</option>}
               </select>
 
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-gray-700">
@@ -735,8 +796,8 @@ export default function DashboardPage() {
               <button onClick={() => setOpenRest(false)} className="text-gray-500">✕</button>
             </div>
             <div className="space-y-3">
-              <div className="text-sm text-rfl-navy font-semibold">You are taking a rest day. You have {Math.max(0, 18 - restUsed)} / 18 rest days left.</div>
-              <div className="text-sm text-gray-700">Rest days remaining: <span className="font-semibold">{Math.max(0, 18 - restUsed)}</span> / 18</div>
+              <div className="text-sm text-rfl-navy font-semibold">You are taking a rest day. You have {Math.max(0, 18 - myRestUsed)} / 18 rest days left.</div>
+              <div className="text-sm text-gray-700">Rest days remaining: <span className="font-semibold">{Math.max(0, 18 - myRestUsed)}</span> / 18</div>
               <label className="block text-sm font-medium text-gray-700">Date</label>
               <input value={date} onChange={(e)=>setDate(e.target.value)} type="date" max={todayStr()} className="w-full border rounded-md px-3 py-2" />
             </div>

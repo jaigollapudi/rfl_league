@@ -39,7 +39,7 @@ export interface WorkoutEntry {
   team_id: string
   date: string
   type: 'workout' | 'rest'
-  workout_type?: 'walk' | 'gym' | 'yoga' | 'cycling' | 'swimming' | 'racket' | 'steps' | 'golf'
+  workout_type?: 'walk' | 'gym' | 'yoga' | 'cycling' | 'swimming' | 'field' | 'steps' | 'golf' | 'meditation'
   duration?: number // in minutes
   distance?: number // in km
   steps?: number
@@ -51,21 +51,21 @@ export interface WorkoutEntry {
 }
 
 // Helper functions
-export const calculateRR = (entry: Partial<WorkoutEntry>): number => {
+export const calculateRR = (entry: Partial<WorkoutEntry> & { age?: number }): number => {
   if (entry.type === 'rest') return 1.0
-  
-  // Base RR is 1.0 for minimum requirements
+
+  const isSenior = typeof entry.age === 'number' && entry.age >= 65
+  const baseDuration = isSenior ? 30 : 45
+  const baseSteps = isSenior ? 5000 : 10000
+
   if (entry.workout_type === 'steps' && entry.steps) {
-    return entry.steps >= 10000 ? Math.min(entry.steps / 10000, 2.0) : 0
+    return entry.steps >= baseSteps ? Math.min(entry.steps / baseSteps, 2.5) : 0
   }
-  
   if (entry.workout_type === 'golf' && entry.holes) {
-    return entry.holes >= 9 ? Math.min(entry.holes / 9, 2.0) : 0
+    return entry.holes >= 9 ? Math.min(entry.holes / 9, 2.5) : 0
   }
-  
   if (entry.duration) {
-    return entry.duration >= 45 ? Math.min(entry.duration / 45, 2.0) : 0
+    return entry.duration >= baseDuration ? Math.min(entry.duration / baseDuration, 2.5) : 0
   }
-  
   return 1.0
 }
