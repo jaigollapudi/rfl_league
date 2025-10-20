@@ -547,22 +547,23 @@ export default function DashboardPage() {
         <p className="text-gray-600">Track your workouts and rest days.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div className="max-w-4xl mx-auto space-y-8 mb-8">
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><TrendingUp className="w-5 h-5 text-rfl-coral" /> League Progression</CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2"><TrendingUp className="w-5 h-5 text-rfl-coral" /> Summary</CardTitle>
+              <div className="flex items-center gap-2 flex-nowrap justify-end">
+                <Button className="bg-rfl-coral hover:bg-rfl-coral/90 h-8 px-3 text-xs shrink-0" onClick={() => { setDate(todayStr()); setOpenWorkout(true); }}>Log Workout</Button>
+                <Button variant="outline" className="h-8 px-3 text-xs border-rfl-navy text-rfl-navy hover:bg-rfl-navy/10 shrink-0" onClick={() => { setDate(todayStr()); setOpenRest(true); }}>Log Rest Day</Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            {/* Action buttons */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <Button className="bg-rfl-coral hover:bg-rfl-coral/90" onClick={() => { setDate(todayStr()); setOpenWorkout(true); }}>Log Workout</Button>
-              <Button variant="outline" className="border-rfl-navy text-rfl-navy hover:bg-rfl-navy/10" onClick={() => { setDate(todayStr()); setOpenRest(true); }}>Log Rest Day</Button>
-            </div>
-
-            {/* My Summary mini card on top */}
-            <div className="rounded-lg border bg-white p-4 mb-4">
+            {/* My Summary */}
+            <div className="rounded-lg border bg-white p-3 sm:p-4 mb-4">
               <div className="text-sm font-semibold text-rfl-navy mb-2">My Summary</div>
-              <div className="grid grid-cols-2 gap-3 text-center">
+              {/* Top metrics: Points, Avg RR (delta), Missed Days */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center mb-4">
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Points</div>
                   <div className="text-lg font-bold text-rfl-coral">{myPoints}</div>
@@ -570,19 +571,73 @@ export default function DashboardPage() {
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Avg RR</div>
                   <div className="text-lg font-bold text-rfl-navy">{myAvgRR !== null ? Number(myAvgRR).toFixed(2) : '—'}</div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    {myAvgRR !== null && teamAvgRR !== null ? (
+                      (() => { const diff = Number((teamAvgRR - myAvgRR).toFixed(2)); return (
+                        <span>{Math.abs(diff).toFixed(2)} {diff > 0 ? 'below' : diff < 0 ? 'above' : 'at'} team avg</span>
+                      ); })()
+                    ) : '—'}
+                  </div>
                 </div>
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Missed days</div>
                   <div className="text-lg font-bold text-rfl-navy">{myMissedDays}</div>
                 </div>
-                <div className="p-3 bg-rfl-peach/50 rounded">
-                  <div className="text-xs text-gray-600">Rest Days Remaining</div>
-                  <div className="text-lg font-bold text-rfl-navy">{Math.max(0, 18 - myRestUsed)} / 18</div>
+              </div>
+              {/* Rest Days and Avg RR — You vs Team row */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Rest Days card */}
+                <div className="rounded-lg border bg-white p-3 sm:p-4">
+                  <div className="text-sm font-semibold text-rfl-navy mb-2">Rest Days</div>
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-rfl-navy flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="text-lg sm:text-xl font-bold text-rfl-navy">{myRestUsed}</div>
+                        <div className="text-xs text-gray-600">used</div>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-gray-700">Remaining: <span className="font-semibold">{Math.max(0, 18 - myRestUsed)}/18</span></div>
+                      <div className="text-xs text-gray-500 mt-2">Tip: This shows how many rest days you've used out of your allocation.</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Avg RR — You vs Team */}
+                <div className="rounded-lg border bg-white p-3 sm:p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm font-semibold text-rfl-navy">Avg RR — You vs Team</div>
+                    <div className="text-xs text-gray-600">Scale: 1.00 → 2.50</div>
+                  </div>
+                  {(() => {
+                    const you = typeof myAvgRR === 'number' ? myAvgRR : 1.0;
+                    const team = typeof teamAvgRR === 'number' ? teamAvgRR : 1.0;
+                    const min = 1.0, max = 2.5, span = max - min;
+                    const pct = (v: number) => Math.max(0, Math.min(100, ((v - min) / span) * 100));
+                    const youPct = pct(you);
+                    const teamPct = pct(team);
+                    return (
+                      <div>
+                        <div className="relative h-2 sm:h-3 rounded-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-400">
+                          <span className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(${youPct}% - 4px)` }}>
+                            <span className="block w-2 h-2 rounded-full bg-rfl-coral border border-white"></span>
+                          </span>
+                          <span className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(${teamPct}% - 4px)` }}>
+                            <span className="block w-2 h-2 rounded-full bg-rfl-light-blue border border-white"></span>
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-4 text-xs text-gray-700 mt-2">
+                          <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rfl-coral inline-block"></span> You: {typeof myAvgRR === 'number' ? myAvgRR.toFixed(2) : '—'}</div>
+                          <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rfl-light-blue inline-block"></span> Team: {typeof teamAvgRR === 'number' ? teamAvgRR.toFixed(2) : '—'}</div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
             
-            {/* Team Summary mini card on bottom */}
+            {/* Team Summary */}
             <div className="rounded-lg border bg-white p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="text-sm font-semibold text-rfl-navy">Team Summary {teamName ? `— ${teamName}` : ''}</div>
@@ -590,7 +645,7 @@ export default function DashboardPage() {
                   <div className="text-xs px-2 py-0.5 rounded-full bg-rfl-coral text-white">Position #{teamPosition}</div>
                 ) : null}
               </div>
-              <div className="grid grid-cols-2 gap-3 text-center">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Points</div>
                   <div className="text-lg font-bold text-rfl-coral">{teamPoints ?? '—'}</div>
