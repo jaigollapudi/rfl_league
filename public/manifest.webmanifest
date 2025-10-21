@@ -1,7 +1,7 @@
 {
-  "name": "RFL Dashboard",
-  "short_name": "RFL",
-  "description": "Rotary Fitness League dashboard",
+  "name": "PFL Dashboard",
+  "short_name": "PFL",
+  "description": "Pristine Fitness League Dashboard",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

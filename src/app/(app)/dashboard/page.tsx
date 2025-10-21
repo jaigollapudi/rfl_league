@@ -598,7 +598,7 @@ export default function DashboardPage() {
                     </div>
                     <div>
                       <div className="text-sm text-gray-700">Remaining: <span className="font-semibold">{Math.max(0, 18 - myRestUsed)}/18</span></div>
-                      <div className="text-xs text-gray-500 mt-2">Tip: This shows how many rest days you've used out of your allocation.</div>
+                      <div className="text-xs text-gray-500 mt-2">Tip: You get 1 point for each rest day up to 18. Allocate smartly!</div>
                     </div>
                   </div>
                 </div>

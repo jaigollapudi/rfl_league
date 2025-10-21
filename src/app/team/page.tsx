@@ -498,7 +498,7 @@ export default function TeamPage() {
         <>
           <Card className="bg-white shadow-md mt-6">
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex items-start justify-between">
                 <div>
                   <CardTitle className="text-xl text-rfl-navy">Submitted Entries</CardTitle>
                   <CardDescription>View and manage submitted entries</CardDescription>

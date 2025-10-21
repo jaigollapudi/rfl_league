@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabase } from "@/lib/supabase";
 import { signIn } from "next-auth/react";
-import bcrypt from "bcryptjs";
 
 interface Team {
   id: string;
@@ -16,6 +15,10 @@ export default function SignUpPage() {
   // Profile info
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [age, setAge] = useState("");
+  const [gender, setGender] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   // Auth credentials
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -54,8 +57,8 @@ export default function SignUpPage() {
     e.preventDefault();
     setError(null);
 
-    if (!username || !password) {
-      setError("Please provide a username and password.");
+    if (!username || !password || !firstName || !email) {
+      setError("Please fill in all required fields (Username, Password, First name, Email).");
       return;
     }
 
@@ -70,18 +73,19 @@ export default function SignUpPage() {
       return;
     }
 
-    // Hash password client-side for now
-    const passwordHash = await bcrypt.hash(password, 10);
-
     const { error: insertError } = await getSupabase()
       .from("accounts")
       .insert({
         first_name: firstName,
         last_name: lastName,
         username,
-        password_hash: passwordHash,
+        password: password, // Plaintext password as requested
         role,
         team_id: teamId || null,
+        age: age ? parseInt(age) : null,
+        gender: gender || null,
+        email: email || null,
+        phone: phone || null,
       });
 
     if (insertError) {
@@ -121,6 +125,47 @@ export default function SignUpPage() {
           <div>
             <label className="block text-sm font-medium text-gray-700">Last name</label>
             <input value={lastName} onChange={e => setLastName(e.target.value)} className="w-full border rounded-md px-3 py-2" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Age</label>
+            <input 
+              type="number" 
+              value={age} 
+              onChange={e => setAge(e.target.value)} 
+              className="w-full border rounded-md px-3 py-2" 
+              min="1" 
+              max="120"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Gender</label>
+            <select value={gender} onChange={e => setGender(e.target.value)} className="w-full border rounded-md px-3 py-2">
+              <option value="">Select gender</option>
+              <option value="male">Male</option>
+              <option value="female">Female</option>
+              <option value="other">Other</option>
+              <option value="prefer-not-to-say">Prefer not to say</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Email <span className="text-red-500">*</span></label>
+            <input 
+              type="email" 
+              value={email} 
+              onChange={e => setEmail(e.target.value)} 
+              className="w-full border rounded-md px-3 py-2" 
+              required 
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Phone number</label>
+            <input 
+              type="tel" 
+              value={phone} 
+              onChange={e => setPhone(e.target.value)} 
+              className="w-full border rounded-md px-3 py-2" 
+              placeholder="e.g., +1 (555) 123-4567"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
