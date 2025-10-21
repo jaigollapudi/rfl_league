@@ -150,12 +150,13 @@ export default function LeaderboardsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-rfl-navy mb-2">Leaderboards</h1>
-        <p className="text-gray-600">Live standings across all approved entries</p>
-      </div>
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-rfl-navy mb-2">Leaderboards</h1>
+          <p className="text-gray-600">Live standings across all approved entries</p>
+        </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-6">
         <Card className="bg-white shadow-md">
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
@@ -277,6 +278,7 @@ export default function LeaderboardsPage() {
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
     </div>
   )
