@@ -571,13 +571,6 @@ export default function DashboardPage() {
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Avg RR</div>
                   <div className="text-lg font-bold text-rfl-navy">{myAvgRR !== null ? Number(myAvgRR).toFixed(2) : '—'}</div>
-                  <div className="text-xs text-gray-600 mt-1">
-                    {myAvgRR !== null && teamAvgRR !== null ? (
-                      (() => { const diff = Number((teamAvgRR - myAvgRR).toFixed(2)); return (
-                        <span>{Math.abs(diff).toFixed(2)} {diff > 0 ? 'below' : diff < 0 ? 'above' : 'at'} team avg</span>
-                      ); })()
-                    ) : '—'}
-                  </div>
                 </div>
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Missed days</div>
