@@ -73,4 +73,7 @@ const { auth, signIn, signOut } = NextAuth(authConfig);
 
 export { auth, signIn, signOut };
 
+// Export options for getServerSession consumers (API routes, etc.)
+export const authOptions = authConfig as any;
+
 
