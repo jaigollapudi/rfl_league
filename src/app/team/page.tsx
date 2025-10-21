@@ -387,10 +387,11 @@ export default function TeamPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-rfl-navy mb-2">Team</h1>
-        <p className="text-gray-600">Team performance metrics and member statistics.</p>
-      </div>
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-rfl-navy mb-2">Team</h1>
+          <p className="text-gray-600">Team performance metrics and member statistics.</p>
+        </div>
 
       <Card className="bg-white shadow-md mb-6">
         <CardHeader>
@@ -596,6 +597,7 @@ export default function TeamPage() {
 
         </>
       )}
+      </div>
     </div>
   )
 }
