@@ -5,7 +5,8 @@ import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Dumbbell, Trophy, Users, BookOpen, User, Menu, X, Key, Eye, EyeOff, LogOut } from 'lucide-react'
 import { signOut, useSession } from 'next-auth/react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { getSupabase } from '@/lib/supabase'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: Dumbbell },
@@ -204,6 +205,69 @@ export function Navbar() {
   const name = session?.user?.name ?? null
   const [mobileOpen, setMobileOpen] = useState(false)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [teamName, setTeamName] = useState<string | null>(null)
+
+  // Fetch team name for logo (two-step fetch for reliability)
+  useEffect(() => {
+    const fetchTeamName = async () => {
+      if (!session?.user?.id) return
+
+      try {
+        // Step 1: get the user's team_id
+        const { data: account } = await getSupabase()
+          .from('accounts')
+          .select('team_id')
+          .eq('id', session.user.id)
+          .maybeSingle()
+
+        const teamId: string | null = (account as any)?.team_id ?? null
+        if (!teamId) {
+          console.log('No team_id for user', session.user.id)
+          return
+        }
+
+        // Step 2: lookup team name by id
+        const { data: team } = await getSupabase()
+          .from('teams')
+          .select('name')
+          .eq('id', teamId)
+          .maybeSingle()
+
+        const teamNameFetched: string | null = (team as any)?.name ?? null
+        if (teamNameFetched) {
+          setTeamName(teamNameFetched)
+        } else {
+          console.log('Team record not found for id', teamId)
+        }
+      } catch (error) {
+        console.error('Error fetching team name:', error)
+      }
+    }
+
+    fetchTeamName()
+  }, [session?.user?.id])
+
+  // Convert team name to logo filename format
+  const getTeamLogoPath = (teamName: string | null) => {
+    if (!teamName) return '/img/placeholder-team.svg'
+
+    // Normalize team names to expected file names
+    const normalized = teamName
+      .trim()
+      .replace(/\s+/g, '_')
+      .replace(/[^a-zA-Z0-9_]/g, '')
+
+    // Some logos have a fixed prefix like 'Pristine_' while others are single words
+    // Try multiple candidates in order
+    const candidates = [
+      `/img/${normalized}_Logo.jpeg`,
+      `/img/Pristine_${normalized}_Logo.jpeg`,
+    ]
+
+    // We can't synchronously check file existence on client; return first candidate.
+    // The <img> has onError fallback to placeholder.
+    return candidates[0]
+  }
 
   return (
     <nav className="bg-rfl-navy text-white shadow-lg">
@@ -249,7 +313,20 @@ export function Navbar() {
           {/* User Menu + Mobile toggle */}
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
-              <User className="w-5 h-5" />
+              {name ? (
+                <div className="w-6 h-6 rounded border border-white/20 overflow-hidden bg-white">
+                  <img 
+                    src={getTeamLogoPath(teamName)} 
+                    alt={`${teamName || 'Team'} logo`} 
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/img/placeholder-team.svg';
+                    }}
+                  />
+                </div>
+              ) : (
+                <User className="w-5 h-5" />
+              )}
               <span className="text-sm">{name ?? 'Guest'}</span>
             </div>
             {/* Desktop-only auth actions */}
@@ -292,7 +369,20 @@ export function Navbar() {
           <div className="absolute right-0 top-0 h-full w-64 bg-rfl-navy text-white shadow-xl">
             <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
               <div className="flex items-center gap-2">
-                <User className="w-5 h-5" />
+                {name ? (
+                  <div className="w-6 h-6 rounded border border-white/20 overflow-hidden bg-white">
+                    <img 
+                      src={getTeamLogoPath(teamName)} 
+                      alt={`${teamName || 'Team'} logo`} 
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/img/placeholder-team.svg';
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <User className="w-5 h-5" />
+                )}
                 <span className="text-sm">{name ?? 'Guest'}</span>
               </div>
               <button className="p-2 rounded hover:bg-rfl-light-blue/30" aria-label="Close menu" onClick={() => setMobileOpen(false)}>
