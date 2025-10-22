@@ -545,25 +545,23 @@ export default function DashboardPage() {
       <div className="max-w-4xl mx-auto space-y-8 mb-8">
         {/* Dashboard title positioned above Summary card content */}
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold text-rfl-navy mb-2">My Dashboard</h1>
-          <p className="text-gray-600">Track your workouts and rest days.</p>
+          <h1 className="text-3xl font-bold text-rfl-navy mb-2">Welcome back, {session?.user?.name?.split(' ')[0] || 'User'}!</h1>
+          <p className="text-gray-600">Let's crush those fitness goals today 💪</p>
         </div>
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="flex items-center gap-2"><TrendingUp className="w-5 h-5 text-rfl-coral" /> Summary</CardTitle>
-              <div className="flex items-center gap-2 flex-nowrap justify-end">
-                <Button className="bg-rfl-coral hover:bg-rfl-coral/90 h-8 px-3 text-xs shrink-0" onClick={() => { setDate(todayStr()); setOpenWorkout(true); }}>Log Workout</Button>
-                <Button variant="outline" className="h-8 px-3 text-xs border-rfl-navy text-rfl-navy hover:bg-rfl-navy/10 shrink-0" onClick={() => { setDate(todayStr()); setOpenRest(true); }}>Log Rest Day</Button>
-              </div>
+            <div className="flex items-center gap-2">
+              <Button className="bg-rfl-coral hover:bg-rfl-coral/90 h-8 flex-1" onClick={() => { setDate(todayStr()); setOpenWorkout(true); }}>Add Workout</Button>
+              <Button variant="outline" className="h-8 flex-1 border-rfl-navy text-rfl-navy hover:bg-rfl-navy/10" onClick={() => { setDate(todayStr()); setOpenRest(true); }}>Add Rest Day</Button>
             </div>
           </CardHeader>
           <CardContent>
             {/* My Summary */}
             <div className="rounded-lg border bg-white p-3 sm:p-4 mb-4">
               <div className="text-sm font-semibold text-rfl-navy mb-2">My Summary</div>
-              {/* Top metrics: Points, Avg RR (delta), Missed Days */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center mb-4">
+              
+              {/* Row 1: Points and Avg RR */}
+              <div className="grid grid-cols-2 gap-3 text-center mb-4">
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Points</div>
                   <div className="text-lg font-bold text-rfl-coral">{myPoints}</div>
@@ -572,61 +570,54 @@ export default function DashboardPage() {
                   <div className="text-xs text-gray-600">Avg RR</div>
                   <div className="text-lg font-bold text-rfl-navy">{myAvgRR !== null ? Number(myAvgRR).toFixed(2) : '—'}</div>
                 </div>
+              </div>
+
+              {/* Row 2: Rest Days Taken, Rest Days Unused, Missed Days */}
+              <div className="grid grid-cols-3 gap-3 text-center mb-4">
                 <div className="p-3 bg-rfl-peach/50 rounded">
-                  <div className="text-xs text-gray-600">Missed days</div>
+                  <div className="text-xs text-gray-600">Rest Days Taken</div>
+                  <div className="text-lg font-bold text-rfl-navy">{myRestUsed}</div>
+                </div>
+                <div className="p-3 bg-rfl-peach/50 rounded">
+                  <div className="text-xs text-gray-600">Rest Days Unused</div>
+                  <div className="text-lg font-bold text-rfl-navy">{Math.max(0, 18 - myRestUsed)}</div>
+                </div>
+                <div className="p-3 bg-rfl-peach/50 rounded">
+                  <div className="text-xs text-gray-600">Missed Days</div>
                   <div className="text-lg font-bold text-rfl-navy">{myMissedDays}</div>
                 </div>
               </div>
-              {/* Rest Days and Avg RR — You vs Team row */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Rest Days card */}
-                <div className="rounded-lg border bg-white p-3 sm:p-4">
-                  <div className="text-sm font-semibold text-rfl-navy mb-2">Rest Days</div>
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-rfl-navy flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="text-lg sm:text-xl font-bold text-rfl-navy">{myRestUsed}</div>
-                        <div className="text-xs text-gray-600">used</div>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-gray-700">Remaining: <span className="font-semibold">{Math.max(0, 18 - myRestUsed)}/18</span></div>
-                      <div className="text-xs text-gray-500 mt-2">Tip: You get 1 point for each rest day up to 18. Allocate smartly!</div>
-                    </div>
-                  </div>
-                </div>
 
-                {/* Avg RR — You vs Team */}
-                <div className="rounded-lg border bg-white p-3 sm:p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-sm font-semibold text-rfl-navy">Avg RR — You vs Team</div>
-                    <div className="text-xs text-gray-600">Scale: 1.00 → 2.50</div>
-                  </div>
-                  {(() => {
-                    const you = typeof myAvgRR === 'number' ? myAvgRR : 1.0;
-                    const team = typeof teamAvgRR === 'number' ? teamAvgRR : 1.0;
-                    const min = 1.0, max = 2.5, span = max - min;
-                    const pct = (v: number) => Math.max(0, Math.min(100, ((v - min) / span) * 100));
-                    const youPct = pct(you);
-                    const teamPct = pct(team);
-                    return (
-                      <div>
-                        <div className="relative h-2 sm:h-3 rounded-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-400">
-                          <span className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(${youPct}% - 4px)` }}>
-                            <span className="block w-2 h-2 rounded-full bg-rfl-coral border border-white"></span>
-                          </span>
-                          <span className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(${teamPct}% - 4px)` }}>
-                            <span className="block w-2 h-2 rounded-full bg-rfl-light-blue border border-white"></span>
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-4 text-xs text-gray-700 mt-2">
-                          <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rfl-coral inline-block"></span> You: {typeof myAvgRR === 'number' ? myAvgRR.toFixed(2) : '—'}</div>
-                          <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rfl-light-blue inline-block"></span> Team: {typeof teamAvgRR === 'number' ? teamAvgRR.toFixed(2) : '—'}</div>
-                        </div>
-                      </div>
-                    );
-                  })()}
+              {/* Row 3: Avg RR — You vs Team */}
+              <div className="rounded-lg border bg-white p-3 sm:p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm font-semibold text-rfl-navy">Avg RR — You vs Team</div>
+                  <div className="text-xs text-gray-600">Scale: 1.00 → 2.50</div>
                 </div>
+                {(() => {
+                  const you = typeof myAvgRR === 'number' ? myAvgRR : 1.0;
+                  const team = typeof teamAvgRR === 'number' ? teamAvgRR : 1.0;
+                  const min = 1.0, max = 2.5, span = max - min;
+                  const pct = (v: number) => Math.max(0, Math.min(100, ((v - min) / span) * 100));
+                  const youPct = pct(you);
+                  const teamPct = pct(team);
+                  return (
+                    <div>
+                      <div className="relative h-2 sm:h-3 rounded-full bg-gradient-to-r from-gray-200 via-gray-300 to-gray-400">
+                        <span className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(${youPct}% - 4px)` }}>
+                          <span className="block w-2 h-2 rounded-full bg-rfl-coral border border-white"></span>
+                        </span>
+                        <span className="absolute top-1/2 -translate-y-1/2" style={{ left: `calc(${teamPct}% - 4px)` }}>
+                          <span className="block w-2 h-2 rounded-full bg-rfl-light-blue border border-white"></span>
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-4 text-xs text-gray-700 mt-2">
+                        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rfl-coral inline-block"></span> You: {typeof myAvgRR === 'number' ? myAvgRR.toFixed(2) : '—'}</div>
+                        <div className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rfl-light-blue inline-block"></span> Team: {typeof teamAvgRR === 'number' ? teamAvgRR.toFixed(2) : '—'}</div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
             
@@ -691,45 +682,44 @@ export default function DashboardPage() {
           <CardContent>
             <div className="space-y-2">
               {rows.map((r) => (
-                <details key={r.date} className="bg-white rounded border">
-                  <summary className="flex cursor-pointer items-center justify-between p-3 list-none">
-                    <div>
-                      <div className="font-medium text-rfl-navy">{formatLocalDateLabel(r.date)}</div>
-                      <div className="text-sm text-gray-600">
-                        {r?.type ? (r.type === 'rest' ? 'Rest Day' : r.workout_type) : 'No entry'}
-                      </div>
+                <div key={r.date} className="bg-white rounded border p-3 flex items-start justify-between">
+                  <div>
+                    <div className="font-medium text-rfl-navy">{formatLocalDateLabel(r.date)}</div>
+                    <div className="text-sm text-gray-600">
+                      {r?.type
+                        ? (
+                          r.type === 'rest'
+                            ? (
+                              <div>
+                                <div>Rest Day</div>
+                                {typeof r.rr_value === 'number' && <div>RR: {Number(r.rr_value).toFixed(2)}</div>}
+                              </div>
+                            )
+                            : (() => {
+                                const cfg = ACTIVITY_CONFIGS[r.workout_type || ''] as any;
+                                const label = cfg?.name ? String(cfg.name).split(' / ')[0] : (r.workout_type || 'Activity');
+                                const metric = r.duration ? `${r.duration} mins` : (r.distance ? `${r.distance} km` : (r.steps ? `${Number(r.steps).toLocaleString()} steps` : (r.holes ? `${r.holes} holes` : '')));
+                                return (
+                                  <div>
+                                    <div>{label}{metric ? ` (${metric})` : ''}</div>
+                                    {typeof r.rr_value === 'number' && <div>RR: {Number(r.rr_value).toFixed(2)}</div>}
+                                  </div>
+                                );
+                              })()
+                          )
+                        : 'No Entry'}
                     </div>
-                    <div className="text-right">
-                      <div className="font-semibold text-rfl-coral">{r.points ?? 0} pt</div>
-                       {r?.status && (
-                         <div className={`text-xs inline-block mt-1 px-2 py-0.5 rounded-full ${
-                           r.status === 'approved' ? 'bg-blue-100 text-blue-800' :
-                           r.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
-                         }`}>{r.status === 'approved' ? 'submitted' : r.status}</div>
-                       )}
-                    </div>
-                  </summary>
-                  {/* Detail content */}
-                  {r?.type ? (
-                    <div className="px-3 pb-3 text-sm text-gray-700">
-                      {r.type === 'rest' ? (
-                        <div>Rest day{typeof r.rr_value === 'number' ? ` • RR ${Number(r.rr_value).toFixed(2)}` : ''}</div>
-                      ) : (
-                        <div className="space-y-1">
-                          <div className="font-medium text-rfl-navy">Workout details</div>
-                          {r.workout_type && <div>Type: {r.workout_type}</div>}
-                          {r.duration ? <div>Duration: {r.duration} min</div> : null}
-                          {r.distance ? <div>Distance: {r.distance} km</div> : null}
-                          {r.steps ? <div>Steps: {r.steps}</div> : null}
-                          {r.holes ? <div>Holes: {r.holes}</div> : null}
-                          {typeof r.rr_value === 'number' ? <div>RR: {Number(r.rr_value).toFixed(2)}</div> : null}
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="px-3 pb-3 text-sm text-gray-500">No details available.</div>
-                  )}
-                </details>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-semibold text-rfl-coral">{r.points ?? 0} pt</div>
+                    {r?.status && (
+                      <div className={`text-xs inline-block mt-1 px-2 py-0.5 rounded-full ${
+                        r.status === 'approved' ? 'bg-blue-100 text-blue-800' :
+                        r.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
+                      }`}>{r.status === 'approved' ? 'submitted' : r.status}</div>
+                    )}
+                  </div>
+                </div>
               ))}
             </div>
           </CardContent>

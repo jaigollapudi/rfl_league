@@ -95,7 +95,7 @@ export default function TeamPage() {
     const seasonEnd = seasonEndStart(currentYear);
     const today = new Date();
     
-    const options = [{ value: "overall", label: "Overall" }];
+    const options = [{ value: "overall", label: "Season Total" }];
     
     // Add weeks that are completed or currently in progress
     let weekStart = new Date(seasonStart);
@@ -111,7 +111,7 @@ export default function TeamPage() {
         const endStr = weekEndDate.toISOString().split('T')[0];
         options.push({
           value: `week-${weekNum}`,
-          label: `Week ${weekNum} (${startStr} - ${endStr})`
+          label: `Week ${weekNum}`
         });
       }
       
@@ -432,7 +432,7 @@ export default function TeamPage() {
                 onClick={() => setDropdownOpen(!dropdownOpen)}
                 className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-rfl-coral focus:border-transparent"
               >
-                <span>{dropdownOptions.find(opt => opt.value === selectedPeriod)?.label || "Overall"}</span>
+                <span>{dropdownOptions.find(opt => opt.value === selectedPeriod)?.label || "Season Total"}</span>
                 <ChevronDown className="w-4 h-4" />
               </button>
               {dropdownOpen && (
@@ -578,7 +578,11 @@ export default function TeamPage() {
                 <div className="w-full flex justify-center">
                   <img src={previewEntry.proof_url} alt="Proof" className="max-h-[60vh] object-contain" />
                 </div>
-              ) : null}
+              ) : (
+                <div className="w-full flex justify-center py-8">
+                  <div className="text-gray-500">No proof image available</div>
+                </div>
+              )}
               {/* Workout details */}
               <div className="mt-6 text-sm text-gray-800">
                 <div className="font-semibold text-rfl-navy mb-1">Workout Details</div>

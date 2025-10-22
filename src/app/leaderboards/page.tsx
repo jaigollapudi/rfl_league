@@ -23,10 +23,13 @@ export default function LeaderboardsPage() {
   const [page, setPage] = useState(1);
   const pageSize = 10;
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingPeriod, setIsLoadingPeriod] = useState(false);
 
   // Fetch leaderboards (existing)
   useEffect(() => {
     (async () => {
+      setIsLoading(true);
       const fetchLeaderboards = async () => {
         const [{ data: t, error: teamError }, { data: p, error: playerError }] = await Promise.all([
           getSupabase().rpc('rfl_team_leaderboard'),
@@ -58,7 +61,8 @@ export default function LeaderboardsPage() {
           setPlayersTotal(playersAll.length); setPlayers(playersAll.slice(from, to));
         } else { setPlayersTotal(0); setPlayers([]); }
       };
-      fetchLeaderboards();
+      await fetchLeaderboards();
+      setIsLoading(false);
     })();
   }, [page]);
 
@@ -73,14 +77,14 @@ export default function LeaderboardsPage() {
     const opts: Array<{ value: string; label: string; start: Date; end: Date }> = [];
     const start = seasonStartDate;
     const today = todayUtc();
-    opts.push({ value: 'overall', label: 'Overall', start, end: today });
+    opts.push({ value: 'overall', label: 'Season Total', start, end: today });
     // Build week ranges starting at seasonStartDate in 7-day buckets
     let wkStart = new Date(start);
     let weekNum = 1;
     while (wkStart <= today) {
       const wkEnd = addDaysUTC(wkStart, 6);
       const shownEnd = wkEnd <= today ? wkEnd : today;
-      const label = `Week ${weekNum} (${wkStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${shownEnd.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`;
+      const label = `Week ${weekNum}`;
       opts.push({ value: `week-${weekNum}`, label, start: new Date(wkStart), end: shownEnd });
       wkStart = addDaysUTC(wkStart, 7);
       weekNum++;
@@ -95,6 +99,8 @@ export default function LeaderboardsPage() {
   const [standings, setStandings] = useState<TeamStanding[]>([]);
   useEffect(() => {
     (async () => {
+      setIsLoadingPeriod(true);
+      setStandings([]); // Clear the table immediately when period changes
       const start = currentPeriod.start;
       const end = currentPeriod.end;
       const prevEnd = ymd(end) === ymd(start) ? null : addDaysUTC(end, -1);
@@ -144,6 +150,7 @@ export default function LeaderboardsPage() {
         return { ...t, position, delta };
       });
       setStandings(withMeta);
+      setIsLoadingPeriod(false);
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPeriod]);
@@ -167,9 +174,14 @@ export default function LeaderboardsPage() {
               <div className="relative dropdown-container">
                 <button
                   onClick={() => setDropdownOpen((v)=>!v)}
-                  className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-rfl-coral focus:border-transparent"
+                  disabled={isLoadingPeriod}
+                  className={`flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-rfl-coral focus:border-transparent ${
+                    isLoadingPeriod 
+                      ? 'opacity-50 cursor-not-allowed' 
+                      : 'hover:bg-gray-50'
+                  }`}
                 >
-                  <span>{periodOptions.find(opt => opt.value === selectedPeriod)?.label || 'Overall'}</span>
+                  <span>{periodOptions.find(opt => opt.value === selectedPeriod)?.label || 'Season Total'}</span>
                   <span className="text-gray-500">▾</span>
                 </button>
                 {dropdownOpen && (
@@ -231,53 +243,22 @@ export default function LeaderboardsPage() {
                       </tr>
                     );
                   })}
-                  {!standings.length && (
+                  {(isLoading || isLoadingPeriod) ? (
+                    <tr><td colSpan={4} className="py-8 text-gray-600 text-center text-sm">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-rfl-coral"></div>
+                        <span>Loading...</span>
+                      </div>
+                    </td></tr>
+                  ) : !standings.length ? (
                     <tr><td colSpan={4} className="py-8 text-gray-600 text-center text-sm">No data yet.</td></tr>
-                  )}
+                  ) : null}
                 </tbody>
               </table>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="bg-white shadow-md">
-          <CardHeader>
-            <CardTitle className="text-xl text-rfl-navy">Individuals</CardTitle>
-            <CardDescription>Top performers across all teams</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {players.map((p, idx) => (
-                <div key={p.user_id} className="grid grid-cols-3 sm:flex sm:items-center sm:justify-between p-3 border rounded">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 shrink-0 rounded-full bg-rfl-coral text-white flex items-center justify-center font-semibold leading-none [font-variant-numeric:tabular-nums]">{idx+1 + (page-1)*pageSize}</div>
-                    <div>
-                      <div className="font-medium text-rfl-navy">{p.name}</div>
-                      <div className="text-xs text-gray-600">{p.team ?? '—'}</div>
-                    </div>
-                  </div>
-                  {/* Fixed-width stats to avoid zigzag */}
-                  <div className="col-span-2 sm:col-auto flex items-center justify-end gap-8 text-sm">
-                    <div className="text-center" style={{ minWidth: 48 }}>
-                      <div className="font-semibold text-rfl-coral">{p.points}</div>
-                      <div className="text-gray-600">points</div>
-                    </div>
-                    <div className="text-center" style={{ minWidth: 48 }}>
-                      <div className="font-semibold text-rfl-navy">{p.avg_rr ?? '-'}</div>
-                      <div className="text-gray-600">RR</div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {!players.length && <div className="text-gray-600">No data yet.</div>}
-            </div>
-            <div className="mt-4 flex items-center justify-center gap-2">
-              <button className={`p-1 rounded border ${page > 1 ? 'hover:bg-gray-50' : 'opacity-50 cursor-not-allowed'}`} onClick={()=>page>1 && setPage(page-1)} aria-label="Previous page">‹</button>
-              <div className="px-3 py-1 rounded bg-gray-100 text-sm font-medium text-gray-800">Page {page}</div>
-              <button className={`p-1 rounded border ${page * pageSize < playersTotal ? 'hover:bg-gray-50' : 'opacity-50 cursor-not-allowed'}`} onClick={()=> page * pageSize < playersTotal && setPage(page+1)} aria-label="Next page">›</button>
-            </div>
-          </CardContent>
-        </Card>
         </div>
       </div>
     </div>
