@@ -453,13 +453,18 @@ export default function DashboardPage() {
 
   async function onSaveWorkout() {
     if (!userId) return;
+    // Enforce: users can only log for the current day
+    if (date !== todayStr()) {
+      alert("You can only log a workout for today.");
+      return;
+    }
     if (!validateWorkout.valid) {
       setValidationError(validateWorkout.error);
       return;
     }
-    // Temporarily disable strict proof requirement; allow saving without an image
-    if (date > todayStr()) {
-      alert("Future dates are not allowed.");
+    // Require proof image upload
+    if (!proofFile) {
+      setProofError('Proof image is required.');
       return;
     }
 
@@ -468,13 +473,13 @@ export default function DashboardPage() {
       p_date: date,
     });
     if (hasExisting) {
-      const ok = window.confirm("You already have a log for this day. Overwrite it?");
-      if (!ok) return;
+      alert('You have already logged an entry for today. Editing past entries is not allowed.');
+      return;
     }
 
     setLoading(true);
     try {
-      // 1) Upload proof image to Supabase Storage (optional for now)
+      // 1) Upload proof image to Supabase Storage (required)
       let proofUrl: string | null = null;
       if (proofFile) {
         const safeName = proofFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -514,9 +519,10 @@ export default function DashboardPage() {
 
   async function onSaveRest() {
     if (!userId) return;
-    if (date > todayStr()) { alert('Future dates are not allowed.'); return; }
-      const { data: hasExisting } = await getSupabase().rpc('rfl_has_entry_on_date', { p_user_id: userId, p_date: date });
-    if (hasExisting) { const ok = window.confirm('You already have a log for this day. Overwrite it?'); if (!ok) return; }
+    // Enforce: rest day can only be logged for today
+    if (date !== todayStr()) { alert('You can only log a rest day for today.'); return; }
+    const { data: hasExisting } = await getSupabase().rpc('rfl_has_entry_on_date', { p_user_id: userId, p_date: date });
+    if (hasExisting) { alert('You have already logged today. Editing past entries is not allowed.'); return; }
     setLoading(true);
     try {
       await getSupabase().rpc('rfl_upsert_rest_day', { p_user_id: userId, p_date: date, p_team_id: null, p_status: 'approved' });
@@ -741,7 +747,7 @@ export default function DashboardPage() {
             )}
             <div className="space-y-3">
               <label className="block text-sm font-medium text-gray-700">Date</label>
-              <input value={date} onChange={(e)=>setDate(e.target.value)} type="date" max={todayStr()} className="w-full border rounded-md px-3 py-2" />
+              <input value={todayStr()} readOnly type="date" className="w-full border rounded-md px-3 py-2 bg-gray-100 text-gray-700" />
               <label className="block text-sm font-medium text-gray-700">Activity</label>
               <select value={activity} onChange={(e)=>setActivity(e.target.value)} className="w-full border rounded-md px-3 py-2">
                 <option value="run">Brisk Walk/Jog/Run</option>
@@ -837,7 +843,7 @@ export default function DashboardPage() {
               <div className="text-sm text-rfl-navy font-semibold">You are taking a rest day. You have {Math.max(0, 18 - myRestUsed)} / 18 rest days left.</div>
               <div className="text-sm text-gray-700">Rest days remaining: <span className="font-semibold">{Math.max(0, 18 - myRestUsed)}</span> / 18</div>
               <label className="block text-sm font-medium text-gray-700">Date</label>
-              <input value={date} onChange={(e)=>setDate(e.target.value)} type="date" max={todayStr()} className="w-full border rounded-md px-3 py-2" />
+              <input value={todayStr()} readOnly type="date" className="w-full border rounded-md px-3 py-2 bg-gray-100 text-gray-700" />
             </div>
             <div className="mt-6 flex justify-end gap-3">
               <Button variant="outline" onClick={() => setOpenRest(false)}>Cancel</Button>
