@@ -159,8 +159,8 @@ export default function LeaderboardsPage() {
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-rfl-navy mb-2">Leaderboards</h1>
-          <p className="text-gray-600">Live standings across all approved entries</p>
+          <h1 className="text-3xl font-bold text-rfl-navy mb-2">Leaderboard</h1>
+          <p className="text-gray-600">🔥 Today’s Leaderboard – Track your team’s race to the top!</p>
         </div>
 
         <div className="space-y-6">
@@ -207,9 +207,9 @@ export default function LeaderboardsPage() {
               <table className="w-full text-sm">
                 <thead className="text-left text-gray-600">
                   <tr>
-                    <th className="py-2 pr-2 text-xs font-semibold w-12">Pos</th>
-                    <th className="py-2 pr-2 text-xs font-semibold w-32">Team</th>
-                    <th className="py-2 pr-2 text-xs font-semibold text-right w-16">Pts</th>
+                    <th className="py-2 pr-2 text-xs font-semibold w-12">Rank</th>
+                    <th className="py-2 pr-2 text-xs font-semibold w-32">Team Name</th>
+                    <th className="py-2 pr-2 text-xs font-semibold text-right w-16">Points</th>
                     <th className="py-2 pr-2 text-xs font-semibold text-right w-16">Avg RR</th>
                   </tr>
                 </thead>

@@ -389,8 +389,8 @@ export default function TeamPage() {
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-rfl-navy mb-2">Team</h1>
-          <p className="text-gray-600">Team performance metrics and member statistics.</p>
+          <h1 className="text-3xl font-bold text-rfl-navy mb-2">Team Dashboard</h1>
+          <p className="text-gray-600">Your team's progress and participation — all in one view.</p>
         </div>
 
       <Card className="bg-white shadow-md mb-6">
@@ -409,11 +409,11 @@ export default function TeamPage() {
               <div className="text-lg font-bold text-rfl-navy">{totals.rr}</div>
             </div>
             <div className="p-3 bg-rfl-peach/50 rounded">
-              <div className="text-xs text-gray-600">Missed days</div>
+              <div className="text-xs text-gray-600">Days Missed</div>
               <div className="text-lg font-bold text-rfl-navy">{teamMissedDays}</div>
             </div>
             <div className="p-3 bg-rfl-peach/50 rounded">
-              <div className="text-xs text-gray-600">Rest Days Taken</div>
+              <div className="text-xs text-gray-600">Rest Days Used</div>
               <div className="text-lg font-bold text-rfl-navy">{teamRestDays}</div>
             </div>
           </div>

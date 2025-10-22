@@ -40,7 +40,7 @@ export default function SignInPage() {
           <button type="submit" className="w-full bg-rfl-navy text-white rounded-md py-2">Continue</button>
         </form>
         <p className="mt-4 text-sm text-center">
-          New to RFL? <a href="/signup" className="text-rfl-coral font-medium">Create an account</a>
+          New to PFL? <a href="/signup" className="text-rfl-coral font-medium">Create an account</a>
         </p>
       </div>
     </div>

@@ -572,10 +572,10 @@ export default function DashboardPage() {
                 </div>
               </div>
 
-              {/* Row 2: Rest Days Taken, Rest Days Unused, Missed Days */}
+              {/* Row 2: Rest Days Used, Rest Days Unused, Missed Days */}
               <div className="grid grid-cols-3 gap-3 text-center mb-4">
                 <div className="p-3 bg-rfl-peach/50 rounded">
-                  <div className="text-xs text-gray-600">Rest Days Taken</div>
+                  <div className="text-xs text-gray-600">Rest Days Used</div>
                   <div className="text-lg font-bold text-rfl-navy">{myRestUsed}</div>
                 </div>
                 <div className="p-3 bg-rfl-peach/50 rounded">
@@ -583,7 +583,7 @@ export default function DashboardPage() {
                   <div className="text-lg font-bold text-rfl-navy">{Math.max(0, 18 - myRestUsed)}</div>
                 </div>
                 <div className="p-3 bg-rfl-peach/50 rounded">
-                  <div className="text-xs text-gray-600">Missed Days</div>
+                  <div className="text-xs text-gray-600">Days Missed</div>
                   <div className="text-lg font-bold text-rfl-navy">{myMissedDays}</div>
                 </div>
               </div>
@@ -639,11 +639,11 @@ export default function DashboardPage() {
                   <div className="text-lg font-bold text-rfl-navy">{teamAvgRR !== null ? Number(teamAvgRR).toFixed(2) : '—'}</div>
                 </div>
                 <div className="p-3 bg-rfl-peach/50 rounded">
-                  <div className="text-xs text-gray-600">Missed days</div>
+                  <div className="text-xs text-gray-600">Days Missed</div>
                   <div className="text-lg font-bold text-rfl-navy">{teamMissedWeek}</div>
                 </div>
                 <div className="p-3 bg-rfl-peach/50 rounded">
-                  <div className="text-xs text-gray-600">Rest Days Taken</div>
+                  <div className="text-xs text-gray-600">Rest Days Used</div>
                   <div className="text-lg font-bold text-rfl-navy">{teamRestWeek}</div>
                 </div>
               </div>

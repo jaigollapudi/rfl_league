@@ -9,9 +9,9 @@ import { useState, useEffect } from 'react'
 import { getSupabase } from '@/lib/supabase'
 
 const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: Dumbbell },
-  { href: '/team', label: 'Team', icon: Users },
-  { href: '/leaderboards', label: 'Leaderboards', icon: Trophy },
+  { href: '/dashboard', label: 'My Progress', icon: Dumbbell },
+  { href: '/team', label: 'My Team', icon: Users },
+  { href: '/leaderboards', label: 'Leaderboard', icon: Trophy },
   { href: '/rules', label: 'Rules', icon: BookOpen },
 ]
 
