@@ -396,7 +396,7 @@ export default function TeamPage() {
       <Card className="bg-white shadow-md mb-6">
         <CardHeader>
           <CardTitle className="text-xl text-rfl-navy">Team Summary</CardTitle>
-          <CardDescription>Points from approved entries only</CardDescription>
+          <CardDescription>Quick overview</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-3 text-center">
