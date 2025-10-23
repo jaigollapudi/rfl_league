@@ -471,7 +471,14 @@ export default function DashboardPage() {
       return;
     }
 
-    // Allow overwrite for the same day (server RPC upsert handles conflict)
+    const { data: hasExisting } = await getSupabase().rpc("rfl_has_entry_on_date", {
+      p_user_id: userId,
+      p_date: date,
+    });
+    if (hasExisting) {
+      const ok = window.confirm("You already have a log for this day. Overwrite it?");
+      if (!ok) return;
+    }
 
     setLoading(true);
     try {
@@ -519,7 +526,15 @@ export default function DashboardPage() {
     if (todayStr() < SEASON_START_LOCAL_STR || todayStr() > SEASON_END_LOCAL_STR) { alert(seasonGuardMsg); return; }
     // Enforce: rest day can only be logged for today
     if (date !== todayStr()) { alert('You can only log a rest day for today.'); return; }
-    // Allow overwrite for the same day (server RPC upsert handles conflict)
+    
+    const { data: hasExisting } = await getSupabase().rpc("rfl_has_entry_on_date", {
+      p_user_id: userId,
+      p_date: date,
+    });
+    if (hasExisting) {
+      const ok = window.confirm("You already have a log for this day. Overwrite it?");
+      if (!ok) return;
+    }
     setLoading(true);
     try {
       await getSupabase().rpc('rfl_upsert_rest_day', { p_user_id: userId, p_date: date, p_team_id: null, p_status: 'approved' });
