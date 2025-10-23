@@ -40,19 +40,28 @@ function addDaysUTC(d: Date, days: number): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + days));
 }
 
-function firstWeekStart(year: number): Date {
-  // Week 1 starts at the Monday on/after Sept 1
-  const sept1 = new Date(Date.UTC(year, 8, 1));
-  const day = sept1.getUTCDay(); // 0 Sun .. 6 Sat
-  // Compute days to add to reach Monday (1). If already Monday, add 0.
-  const add = day === 0 ? 1 : (day <= 1 ? (1 - day) : (7 - (day - 1)));
-  const monday = addDaysUTC(sept1, add);
-  return monday;
+// Fixed season window: Oct 25, 2025 → Jan 23, 2026
+function seasonFixedStart(): Date {
+  return new Date(Date.UTC(2025, 9, 25)); // Oct = 9
 }
-
+function seasonFixedEnd(): Date {
+  return new Date(Date.UTC(2026, 0, 23)); // Jan = 0
+}
+const SEASON_START_LOCAL_STR = '2025-10-25';
+const SEASON_END_LOCAL_STR = '2026-01-23';
+function firstWeekStart(year: number): Date {
+  // Week 1 starts at the Monday on/after season start
+  const start = seasonFixedStart();
+  const day = start.getUTCDay(); // 0 Sun .. 6 Sat
+  const add = day === 0 ? 1 : (day <= 1 ? (1 - day) : (7 - (day - 1)));
+  return addDaysUTC(start, add);
+}
 function seasonEndStart(year: number): Date {
-  // Last allowed week start is Dec 1
-  return new Date(Date.UTC(year, 11, 1)); // Dec = 11
+  // Last allowed week start is the Monday on/before season end
+  const end = seasonFixedEnd();
+  const day = end.getUTCDay(); // 0 Sun .. 6 Sat
+  const sub = day === 1 ? 0 : (day === 0 ? 6 : (day - 1));
+  return addDaysUTC(end, -sub);
 }
 
 function formatLocalDateLabel(yyyyMmDd: string): string {
@@ -179,6 +188,11 @@ export default function DashboardPage() {
   const sessionAge = (session?.user as any)?.age as number | undefined;
   const isSeniorEffective = (typeof sessionAge === 'number' && sessionAge >= 65) || isSenior;
   const PROOF_BUCKET = (process.env.NEXT_PUBLIC_PROOF_BUCKET as string) || 'rofl_proof_pics';
+  const canLogToday = useMemo(() => {
+    const t = todayStr();
+    return t >= SEASON_START_LOCAL_STR && t <= SEASON_END_LOCAL_STR;
+  }, []);
+  const seasonGuardMsg = 'Season runs Oct 25, 2025 to Jan 23, 2026. Logging opens on Oct 25.';
   
 
   const validateWorkout = useMemo(() => {
@@ -338,9 +352,9 @@ export default function DashboardPage() {
   useEffect(() => {
     (async () => {
       if (!userId) return;
-      const seasonStart = new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1)); // Sept 1
+      const seasonStart = seasonFixedStart();
       const today = new Date();
-      const seasonStartStr = seasonStart.toISOString().split('T')[0];
+      const seasonStartStr = SEASON_START_LOCAL_STR;
       const todayStr = today.toISOString().split('T')[0];
 
       // Fetch all my approved entries for the season
@@ -392,9 +406,9 @@ export default function DashboardPage() {
       }
       if (!effectiveTeamId) return;
       
-      const seasonStart = new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1)); // Sept 1
+      const seasonStart = seasonFixedStart();
       const today = new Date();
-      const seasonStartStr = seasonStart.toISOString().split('T')[0];
+      const seasonStartStr = SEASON_START_LOCAL_STR;
       const todayStr = today.toISOString().split('T')[0];
       
       // Fetch team members
@@ -453,6 +467,8 @@ export default function DashboardPage() {
 
   async function onSaveWorkout() {
     if (!userId) return;
+    if (!canLogToday) { alert(seasonGuardMsg); return; }
+    if (todayStr() < SEASON_START_LOCAL_STR || todayStr() > SEASON_END_LOCAL_STR) { alert(seasonGuardMsg); return; }
     // Enforce: users can only log for the current day
     if (date !== todayStr()) {
       alert("You can only log a workout for today.");
@@ -519,6 +535,8 @@ export default function DashboardPage() {
 
   async function onSaveRest() {
     if (!userId) return;
+    if (!canLogToday) { alert(seasonGuardMsg); return; }
+    if (todayStr() < SEASON_START_LOCAL_STR || todayStr() > SEASON_END_LOCAL_STR) { alert(seasonGuardMsg); return; }
     // Enforce: rest day can only be logged for today
     if (date !== todayStr()) { alert('You can only log a rest day for today.'); return; }
     const { data: hasExisting } = await getSupabase().rpc('rfl_has_entry_on_date', { p_user_id: userId, p_date: date });
@@ -557,8 +575,8 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
-              <Button className="bg-rfl-coral hover:bg-rfl-coral/90 h-8 flex-1" onClick={() => { setDate(todayStr()); setOpenWorkout(true); }}>Add Workout</Button>
-              <Button variant="outline" className="h-8 flex-1 border-rfl-navy text-rfl-navy hover:bg-rfl-navy/10" onClick={() => { setDate(todayStr()); setOpenRest(true); }}>Add Rest Day</Button>
+              <Button disabled={!canLogToday} className="bg-rfl-coral hover:bg-rfl-coral/90 h-8 flex-1 disabled:opacity-50" onClick={() => { if(!canLogToday){alert(seasonGuardMsg);return;} setDate(todayStr()); setOpenWorkout(true); }}>Add Workout</Button>
+              <Button disabled={!canLogToday} variant="outline" className="h-8 flex-1 border-rfl-navy text-rfl-navy hover:bg-rfl-navy/10 disabled:opacity-50" onClick={() => { if(!canLogToday){alert(seasonGuardMsg);return;} setDate(todayStr()); setOpenRest(true); }}>Add Rest Day</Button>
             </div>
           </CardHeader>
           <CardContent>
