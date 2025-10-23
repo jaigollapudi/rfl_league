@@ -52,13 +52,13 @@ function ymd(d: Date): string {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-// League date functions
-function firstWeekStart(year: number): Date {
-  return new Date(Date.UTC(year, 8, 1)); // Sept 1
+// League date functions (fixed season: Oct 23, 2025 → Jan 23, 2026)
+function firstWeekStart(_year: number): Date {
+  return new Date(Date.UTC(2025, 9, 23)); // Oct 23, 2025
 }
 
-function seasonEndStart(year: number): Date {
-  return new Date(Date.UTC(year, 11, 1)); // Dec 1
+function seasonEndStart(_year: number): Date {
+  return new Date(Date.UTC(2026, 0, 23)); // Jan 23, 2026
 }
 
 function addDaysUTC(d: Date, days: number): Date {
@@ -90,9 +90,8 @@ export default function TeamPage() {
 
   // Generate dropdown options based on league dates
   const dropdownOptions = useMemo(() => {
-    const currentYear = new Date().getUTCFullYear();
-    const seasonStart = firstWeekStart(currentYear);
-    const seasonEnd = seasonEndStart(currentYear);
+    const seasonStart = firstWeekStart(0);
+    const seasonEnd = seasonEndStart(0);
     const today = new Date();
     
     const options = [{ value: "overall", label: "Season Total" }];
@@ -101,7 +100,7 @@ export default function TeamPage() {
     let weekStart = new Date(seasonStart);
     let weekNum = 1;
     
-    while (weekStart.getTime() < seasonEnd.getTime()) {
+    while (weekStart.getTime() <= Math.min(seasonEnd.getTime(), today.getTime())) {
       const weekEnd = addDaysUTC(weekStart, 6);
       const weekEndDate = new Date(Math.min(weekEnd.getTime(), today.getTime()));
       
@@ -188,13 +187,12 @@ export default function TeamPage() {
     let endDateCalc: Date;
     
     if (timePeriod === "overall") {
-      // Overall: from season start to today
-      cur = new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1));
+      // Overall: from fixed season start to today
+      cur = firstWeekStart(0);
       endDateCalc = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
     } else {
       // Weekly: from week start to week end (or today if current week)
-      const currentYear = new Date().getUTCFullYear();
-      const seasonStart = firstWeekStart(currentYear);
+      const seasonStart = firstWeekStart(0);
       const weekNum = parseInt(timePeriod.split('-')[1]);
       cur = addDaysUTC(seasonStart, (weekNum - 1) * 7);
       const weekEnd = addDaysUTC(cur, 6);
@@ -317,13 +315,12 @@ export default function TeamPage() {
       let endDate: Date;
       
       if (timePeriod === "overall") {
-        // Overall: from season start to today
-        cur = new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1));
+        // Overall: from fixed season start to today
+        cur = firstWeekStart(0);
         endDate = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
       } else {
         // Weekly: from week start to week end (or today if current week)
-        const currentYear = new Date().getUTCFullYear();
-        const seasonStart = firstWeekStart(currentYear);
+        const seasonStart = firstWeekStart(0);
         const weekNum = parseInt(timePeriod.split('-')[1]);
         cur = addDaysUTC(seasonStart, (weekNum - 1) * 7);
         const weekEnd = addDaysUTC(cur, 6);
