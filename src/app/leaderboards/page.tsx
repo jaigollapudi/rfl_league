@@ -1,7 +1,8 @@
 "use client";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Volume2, VolumeX } from 'lucide-react';
 import { getSupabase } from "@/lib/supabase";
 
 type TeamRow = { team_id: string; team_name: string; points: number; avg_rr: number | null };
@@ -25,6 +26,48 @@ export default function LeaderboardsPage() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingPeriod, setIsLoadingPeriod] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  // Initialize audio element lazily
+  const ensureAudio = () => {
+    if (!audioRef.current) {
+      const el = new Audio('/audio/leaderboard-theme.mp3');
+      el.preload = 'auto';
+      el.onended = () => setIsPlaying(false);
+      audioRef.current = el;
+    }
+    return audioRef.current;
+  };
+
+  const toggleAudio = async () => {
+    try {
+      const el = ensureAudio();
+      if (isPlaying) {
+        el.pause();
+        el.currentTime = 0; // restart on next play
+        setIsPlaying(false);
+      } else {
+        await el.play();
+        setIsPlaying(true);
+      }
+    } catch (e) {
+      console.error('Audio play failed (likely due to browser policies):', e);
+    }
+  };
+
+  // Cleanup when navigating away
+  useEffect(() => {
+    return () => {
+      const el = audioRef.current;
+      if (el) {
+        try {
+          el.pause();
+          el.currentTime = 0;
+        } catch {}
+      }
+    };
+  }, []);
 
   // Fetch leaderboards (existing)
   useEffect(() => {
@@ -171,7 +214,16 @@ export default function LeaderboardsPage() {
                 <CardTitle className="text-xl text-rfl-navy">Teams</CardTitle>
                 <CardDescription>Standings table</CardDescription>
               </div>
-              <div className="relative dropdown-container">
+              <div className="flex items-center gap-2">
+                <button
+                  aria-label={isPlaying ? 'Stop music' : 'Play music'}
+                  onClick={toggleAudio}
+                  className={`p-2 rounded-md border border-gray-300 ${isPlaying ? 'bg-rfl-coral text-white' : 'hover:bg-gray-50'}`}
+                  title={isPlaying ? 'Stop' : 'Play'}
+                >
+                  {isPlaying ? <VolumeX className="w-4 h-4"/> : <Volume2 className="w-4 h-4"/>}
+                </button>
+                <div className="relative dropdown-container">
                 <button
                   onClick={() => setDropdownOpen((v)=>!v)}
                   disabled={isLoadingPeriod}
@@ -199,6 +251,7 @@ export default function LeaderboardsPage() {
                     </div>
                   </div>
                 )}
+                </div>
               </div>
             </div>
           </CardHeader>
