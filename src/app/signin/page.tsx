@@ -39,9 +39,7 @@ export default function SignInPage() {
           {error && <p className="text-sm text-red-600">{error}</p>}
           <button type="submit" className="w-full bg-rfl-navy text-white rounded-md py-2">Continue</button>
         </form>
-        <p className="mt-4 text-sm text-center">
-          New to PFL? <a href="/signup" className="text-rfl-coral font-medium">Create an account</a>
-        </p>
+        {/* Sign up removed */}
       </div>
     </div>
   );
