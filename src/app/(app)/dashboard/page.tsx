@@ -42,12 +42,12 @@ function addDaysUTC(d: Date, days: number): Date {
 
 // Fixed season window: Oct 25, 2025 → Jan 23, 2026
 function seasonFixedStart(): Date {
-  return new Date(Date.UTC(2025, 9, 25)); // Oct = 9
+  return new Date(Date.UTC(2025, 9, 23)); // Oct 23, 2025
 }
 function seasonFixedEnd(): Date {
   return new Date(Date.UTC(2026, 0, 23)); // Jan = 0
 }
-const SEASON_START_LOCAL_STR = '2025-10-25';
+const SEASON_START_LOCAL_STR = '2025-10-23';
 const SEASON_END_LOCAL_STR = '2026-01-23';
 function firstWeekStart(year: number): Date {
   // Week 1 starts at the Monday on/after season start

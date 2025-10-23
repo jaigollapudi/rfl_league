@@ -67,7 +67,7 @@ export default function LeaderboardsPage() {
   }, [page]);
 
   // Utilities for period boundaries
-  const seasonStartDate = useMemo(() => new Date(Date.UTC(new Date().getUTCFullYear(), 8, 1)), []); // Sep 1 UTC of current year
+  const seasonStartDate = useMemo(() => new Date(Date.UTC(2025, 9, 23)), []); // Oct 23 2025 UTC
   const todayUtc = () => new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
   const ymd = (d: Date) => d.toISOString().split('T')[0];
   const addDaysUTC = (d: Date, n: number) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + n));
