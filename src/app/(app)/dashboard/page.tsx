@@ -49,19 +49,16 @@ function seasonFixedEnd(): Date {
 }
 const SEASON_START_LOCAL_STR = '2025-10-23';
 const SEASON_END_LOCAL_STR = '2026-01-23';
-function firstWeekStart(year: number): Date {
-  // Week 1 starts at the Monday on/after season start
-  const start = seasonFixedStart();
-  const day = start.getUTCDay(); // 0 Sun .. 6 Sat
-  const add = day === 0 ? 1 : (day <= 1 ? (1 - day) : (7 - (day - 1)));
-  return addDaysUTC(start, add);
+function firstWeekStart(_year: number): Date {
+  // Week 1 starts exactly on season start (Oct 23, 2025 - Thursday)
+  return seasonFixedStart();
 }
-function seasonEndStart(year: number): Date {
-  // Last allowed week start is the Monday on/before season end
+function seasonEndStart(_year: number): Date {
+  // Last allowed week start is the latest start (start + 7k) not after season end
+  const start = seasonFixedStart();
   const end = seasonFixedEnd();
-  const day = end.getUTCDay(); // 0 Sun .. 6 Sat
-  const sub = day === 1 ? 0 : (day === 0 ? 6 : (day - 1));
-  return addDaysUTC(end, -sub);
+  const diffDays = Math.floor((end.getTime() - start.getTime()) / (7 * 24 * 3600 * 1000));
+  return addDaysUTC(start, diffDays * 7);
 }
 
 function formatLocalDateLabel(yyyyMmDd: string): string {
@@ -172,17 +169,7 @@ export default function DashboardPage() {
   const [myAvgRR, setMyAvgRR] = useState<number | null>(null);
   const [myMissedDays, setMyMissedDays] = useState<number>(0);
   const [myRestUsed, setMyRestUsed] = useState<number>(0);
-  const [viewWeekStart, setViewWeekStart] = useState<Date>(() => {
-    const now = new Date();
-    const y = now.getUTCFullYear();
-    const seasonStart = firstWeekStart(y);
-    const end = seasonEndStart(y);
-    let idx = Math.floor((new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).getTime() - seasonStart.getTime()) / (7 * 24 * 3600 * 1000));
-    if (idx < 0) idx = 0;
-    const maxIdx = Math.floor((end.getTime() - seasonStart.getTime()) / (7 * 24 * 3600 * 1000));
-    if (idx > maxIdx) idx = maxIdx;
-    return addDaysUTC(seasonStart, idx * 7);
-  });
+  const [viewWeekStart, setViewWeekStart] = useState<Date>(() => seasonFixedStart());
 
   const currentConfig = ACTIVITY_CONFIGS[activity];
   const sessionAge = (session?.user as any)?.age as number | undefined;
@@ -192,7 +179,7 @@ export default function DashboardPage() {
     const t = todayStr();
     return t >= SEASON_START_LOCAL_STR && t <= SEASON_END_LOCAL_STR;
   }, []);
-  const seasonGuardMsg = 'Season runs Oct 25, 2025 to Jan 23, 2026. Logging opens on Oct 25.';
+  const seasonGuardMsg = 'Season runs Oct 23, 2025 to Jan 23, 2026. Logging opens on Oct 23.';
   
 
   const validateWorkout = useMemo(() => {
