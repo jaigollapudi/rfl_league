@@ -110,7 +110,7 @@ export default function RulesPage() {
           <div className="space-y-3">
             <div className="flex items-start gap-3">
               <Clock className="w-6 h-6 text-rfl-light-blue mt-0.5 flex-shrink-0" />
-              <span className="text-sm sm:text-base"><strong>Workout Submission:</strong> Post your approved workout with screenshot in your Team&apos;s group by 11:49pm. Your captain/VC will send them all to Governors in provided format.</span>
+              <span className="text-sm sm:text-base"><strong>Workout Submission:</strong> Post your approved workout with screenshot in the PFL website by 11:59pm. Your captain/VC will send them all to Governors in provided format.</span>
             </div>
             <div className="flex items-start gap-3">
               <Trophy className="w-6 h-6 text-yellow-500 mt-0.5 flex-shrink-0" />

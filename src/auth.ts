@@ -17,6 +17,12 @@ declare module "next-auth" {
 const authConfig = {
   session: {
     strategy: "jwt" as const,
+    // Keep users signed in unless they sign out (long-lived cookie)
+    maxAge: 365 * 24 * 60 * 60, // 365 days
+    updateAge: 24 * 60 * 60, // refresh cookie age every 24h on activity
+  },
+  jwt: {
+    maxAge: 365 * 24 * 60 * 60, // align JWT age with session
   },
   secret: process.env.NEXTAUTH_SECRET,
   providers: [

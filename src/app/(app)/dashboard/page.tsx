@@ -21,7 +21,13 @@ type ActivityRow = {
   points: number | null;
 };
 
-const todayStr = () => new Date().toISOString().split("T")[0];
+const todayStr = () => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
 
 function formatDateYYYYMMDD(d: Date): string {
   // Use UTC components to avoid timezone shifting across boundaries
@@ -119,10 +125,9 @@ const ACTIVITY_CONFIGS: Record<string, ActivityConfig> = {
   },
   golf: {
     name: "Golf",
-    fields: ['holes', 'steps'],
-    rules: ["9 holes (8000+ steps)"],
+    fields: ['holes'],
+    rules: ["9 holes"],
     minHoles: 9,
-    minSteps: 8000,
   },
 };
 
@@ -190,14 +195,9 @@ export default function DashboardPage() {
 
     if (activity === "golf") {
       const holesProvided = holes !== "" && holes !== null && Number(holes) > 0;
-      const stepsProvided = steps !== "" && steps !== null && Number(steps) > 0;
-      if (holesProvided && stepsProvided) {
-        return { valid: false, error: "Please provide only one: Holes OR Steps" };
-      }
       const holesValid = holesProvided && Number(holes) >= (config.minHoles || 0);
-      const stepsValid = stepsProvided && Number(steps) >= (config.minSteps || 0);
-      if (!holesValid && !stepsValid) {
-        return { valid: false, error: `Minimum ${config.minHoles} holes OR ${config.minSteps?.toLocaleString()} steps required` };
+      if (!holesValid) {
+        return { valid: false, error: `Minimum ${config.minHoles} holes required` };
       }
       return { valid: true, error: "" };
     }
@@ -551,7 +551,7 @@ export default function DashboardPage() {
       <div className="max-w-4xl mx-auto space-y-8 mb-8">
         {/* Dashboard title positioned above Summary card content */}
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold text-rfl-navy mb-2">Welcome back, {session?.user?.name?.split(' ')[0] || 'User'}!</h1>
+          <h1 className="text-3xl font-bold text-rfl-navy mb-2">Welcome, {session?.user?.name?.split(' ')[0] || 'User'}!</h1>
           <p className="text-gray-600">Let's crush those fitness goals today 💪</p>
         </div>
         <Card>
@@ -746,9 +746,9 @@ export default function DashboardPage() {
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">{proofError}</div>
             )}
             <div className="space-y-3">
-              <label className="block text-sm font-medium text-gray-700">Date</label>
-              <input value={todayStr()} readOnly type="date" className="w-full border rounded-md px-3 py-2 bg-gray-100 text-gray-700" />
-              <label className="block text-sm font-medium text-gray-700">Activity</label>
+              <label className="block text-sm font-medium text-gray-700">Workout Date</label>
+              <input value={date} readOnly type="date" className="w-full border rounded-md px-3 py-2 bg-gray-100 text-gray-700" />
+              <label className="block text-sm font-medium text-gray-700">Workout Type</label>
               <select value={activity} onChange={(e)=>setActivity(e.target.value)} className="w-full border rounded-md px-3 py-2">
                 <option value="run">Brisk Walk/Jog/Run</option>
                 <option value="gym">Weightlifting / Gym Workout</option>
@@ -762,8 +762,8 @@ export default function DashboardPage() {
               </select>
 
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-gray-700">
-                <div className="font-medium text-rfl-navy mb-1">Requirements:</div>
-                {currentConfig.rules.map((rule, idx) => (<div key={idx}>• {rule}</div>))}
+                <div className="font-medium text-rfl-navy mb-1">Requirement:</div>
+                <div className="text-sm whitespace-nowrap overflow-hidden text-ellipsis">{currentConfig.rules.join(' ')}</div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -782,19 +782,12 @@ export default function DashboardPage() {
                     <input value={distance ?? ''} onChange={(e)=>{ setDistance(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} step="0.1" className="w-full border rounded-md px-3 py-2" />
                   </div>
                 )}
-                {activity === 'golf' ? (
-                  <div className="col-span-2 flex items-end gap-2">
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700">Holes (golf){currentConfig.minHoles ? ` — min ${currentConfig.minHoles}` : ''}</label>
-                      <input value={holes ?? ''} onChange={(e)=>{ setHoles(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
-                    </div>
-                    <div className="pb-2 text-xs font-semibold text-gray-600">OR</div>
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700">Steps{currentConfig.minSteps ? ` — min ${currentConfig.minSteps.toLocaleString()}` : ''}</label>
-                      <input value={steps ?? ''} onChange={(e)=>{ setSteps(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
-                    </div>
-                  </div>
-                ) : (
+              {activity === 'golf' ? (
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-gray-700">Holes (golf){currentConfig.minHoles ? ` — min ${currentConfig.minHoles}` : ''}</label>
+                  <input value={holes ?? ''} onChange={(e)=>{ setHoles(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
+                </div>
+              ) : (
                   <>
                     {currentConfig.fields.includes('steps') && (
                       <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
@@ -814,7 +807,7 @@ export default function DashboardPage() {
 
               {/* Proof upload */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Upload proof (image)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{activity === 'steps' ? 'Upload Proof - Pic or Screenshot showing 1) Date 2) Steps' : 'Upload Proof - Pic or Screenshot showing 1) Date 2) Activity 3) Duration'}</label>
                 <input
                   type="file"
                   accept="image/*"
@@ -825,8 +818,8 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-3">
-              <Button variant="outline" onClick={() => { setOpenWorkout(false); setValidationError(""); }}>Cancel</Button>
-              <Button disabled={loading} className="bg-rfl-navy" onClick={onSaveWorkout}>{loading ? 'Saving…' : 'Save'}</Button>
+              <Button variant="outline" onClick={() => { setOpenWorkout(false); setValidationError(""); }}>Back</Button>
+              <Button disabled={loading} className="bg-rfl-navy" onClick={onSaveWorkout}>{loading ? 'Submitting…' : 'Submit'}</Button>
             </div>
           </div>
         </div>
@@ -842,12 +835,12 @@ export default function DashboardPage() {
             <div className="space-y-3">
               <div className="text-sm text-rfl-navy font-semibold">You are taking a rest day. You have {Math.max(0, 18 - myRestUsed)} / 18 rest days left.</div>
               <div className="text-sm text-gray-700">Rest days remaining: <span className="font-semibold">{Math.max(0, 18 - myRestUsed)}</span> / 18</div>
-              <label className="block text-sm font-medium text-gray-700">Date</label>
-              <input value={todayStr()} readOnly type="date" className="w-full border rounded-md px-3 py-2 bg-gray-100 text-gray-700" />
+              <label className="block text-sm font-medium text-gray-700">Workout Date</label>
+              <input value={date} readOnly type="date" className="w-full border rounded-md px-3 py-2 bg-gray-100 text-gray-700" />
             </div>
             <div className="mt-6 flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setOpenRest(false)}>Cancel</Button>
-              <Button disabled={loading} className="bg-rfl-navy" onClick={onSaveRest}>{loading ? 'Saving…' : 'Save'}</Button>
+              <Button variant="outline" onClick={() => setOpenRest(false)}>Back</Button>
+              <Button disabled={loading} className="bg-rfl-navy" onClick={onSaveRest}>{loading ? 'Submitting…' : 'Submit'}</Button>
             </div>
           </div>
         </div>
