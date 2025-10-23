@@ -343,12 +343,19 @@ export default function TeamPage() {
   async function loadPending(currentTeamId: string, pageNum: number) {
     const from = (pageNum - 1) * pageSize;
     const to = from + pageSize - 1;
+    // Only show entries from today and yesterday
+    const today = new Date();
+    const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+    const startStr = ymd(yesterday); // inclusive
+    const endStr = ymd(today);       // inclusive
     // total count
     const { count } = await getSupabase()
       .from('entries')
       .select('id', { count: 'exact', head: true })
       .eq('team_id', currentTeamId)
-      .eq('status', 'approved');
+      .eq('status', 'approved')
+      .gte('date', startStr)
+      .lte('date', endStr);
     setPendingCount(count || 0);
 
     // page data
@@ -357,6 +364,8 @@ export default function TeamPage() {
       .select('id,user_id,date,type,workout_type,duration,distance,steps,holes,rr_value,status,proof_url,accounts!inner(first_name)')
       .eq('team_id', currentTeamId)
       .eq('status','approved')
+      .gte('date', startStr)
+      .lte('date', endStr)
       .order('date', { ascending: false })
       .range(from, to);
     const normalized = (pend || []).map((e: any) => ({

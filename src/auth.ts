@@ -33,7 +33,7 @@ const authConfig = {
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        const username = (credentials?.username || "").trim();
+        const username = (credentials?.username || "").trim().toLowerCase();
         const password = credentials?.password || "";
         if (!username || !password) return null;
         const { data: acct } = await getSupabase()

@@ -15,7 +15,7 @@ export default function SignInPage() {
     e.preventDefault();
     setError(null);
     const res = await signIn("credentials", {
-      username,
+      username: username.trim().toLowerCase(),
       password,
       redirect: true,
       callbackUrl: "/dashboard",

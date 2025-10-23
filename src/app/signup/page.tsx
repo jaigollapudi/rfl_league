@@ -62,11 +62,12 @@ export default function SignUpPage() {
       return;
     }
 
-    // Ensure username is unique
+    // Normalize username to lowercase and ensure uniqueness
+    const normalizedUsername = username.trim().toLowerCase();
     const { data: existing } = await getSupabase()
       .from("accounts")
       .select("id")
-      .eq("username", username)
+      .eq("username", normalizedUsername)
       .maybeSingle();
     if (existing) {
       setError("That username is already taken.");
@@ -78,7 +79,7 @@ export default function SignUpPage() {
       .insert({
         first_name: firstName,
         last_name: lastName,
-        username,
+        username: normalizedUsername,
         password: password, // Plaintext password as requested
         role,
         team_id: teamId || null,
@@ -95,7 +96,7 @@ export default function SignUpPage() {
 
     // Auto sign-in after sign-up with new credentials
     const res = await signIn("credentials", {
-      username,
+      username: normalizedUsername,
       password,
       redirect: false,
       callbackUrl: "/dashboard",
