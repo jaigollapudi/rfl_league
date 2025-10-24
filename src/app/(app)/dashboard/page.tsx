@@ -29,6 +29,21 @@ const todayStr = () => {
   return `${y}-${m}-${day}`;
 };
 
+// Local-date formatter (no UTC conversion) → guarantees device-local YYYY-MM-DD
+function formatLocalYYYYMMDD(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function yesterdayLocalStr(): string {
+  const d = new Date();
+  d.setHours(0,0,0,0);
+  d.setDate(d.getDate() - 1);
+  return formatLocalYYYYMMDD(d);
+}
+
 function formatDateYYYYMMDD(d: Date): string {
   // Use UTC components to avoid timezone shifting across boundaries
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
@@ -147,7 +162,7 @@ export default function DashboardPage() {
   const [date, setDate] = useState<string>(todayStr());
   const [activity, setActivity] = useState("gym");
   const [duration, setDuration] = useState<number | "">(45);
-  const [distance, setDistance] = useState<number | "">("");
+  const [distance, setDistance] = useState<string | number>("");
   const [steps, setSteps] = useState<number | "">("");
   const [holes, setHoles] = useState<number | "">("");
   const [rows, setRows] = useState<ActivityRow[]>([]);
@@ -224,6 +239,11 @@ export default function DashboardPage() {
 
     return { valid: true, error: "" };
   }, [userId, activity, duration, distance, steps, holes]);
+
+  // Helpers for numeric-only validation in text inputs
+  const isIntString = (v: string) => /^\d+$/.test(v);
+  // Accepts integers, decimals, and intermediate states like "12." or ".5"
+  const isDecimalString = (v: string) => /^(?:\d+(?:\.\d*)?|\.\d+)$/.test(v);
 
   async function fetchActivity(weekStart?: Date) {
     if (!userId) return;
@@ -456,11 +476,10 @@ export default function DashboardPage() {
     if (!userId) return;
     if (!canLogToday) { alert(seasonGuardMsg); return; }
     if (todayStr() < SEASON_START_LOCAL_STR || todayStr() > SEASON_END_LOCAL_STR) { alert(seasonGuardMsg); return; }
-    // Enforce: users can only log for the current day
-    if (date !== todayStr()) {
-      alert("You can only log a workout for today.");
-      return;
-    }
+    // Allow only current date captured at modal open time (or yesterday if implemented)
+    const t = todayStr();
+    const y = yesterdayLocalStr();
+    if (date !== t && date !== y) { alert('You can only submit for today or yesterday.'); return; }
     if (!validateWorkout.valid) {
       setValidationError(validateWorkout.error);
       return;
@@ -471,12 +490,15 @@ export default function DashboardPage() {
       return;
     }
 
-    const { data: hasExisting } = await getSupabase().rpc("rfl_has_entry_on_date", {
-      p_user_id: userId,
-      p_date: date,
-    });
-    if (hasExisting) {
-      const ok = window.confirm("You already have a log for this day. Overwrite it?");
+    const { data: hasExisting } = await getSupabase().rpc("rfl_has_entry_on_date", { p_user_id: userId, p_date: date });
+    if (date === t && hasExisting) {
+      const ok = window.confirm('You already have a log for today. Overwrite it?');
+      if (!ok) return;
+    }
+    if (date === y) {
+      const { data: existingY } = await getSupabase().from('entries').select('id,status').eq('user_id', userId).eq('date', y).maybeSingle();
+      if (!existingY || existingY.status !== 'rejected') { alert('You can only re-submit for yesterday if your previous entry was rejected.'); return; }
+      const ok = window.confirm("You're about to overwrite your rejected entry from yesterday. Continue?");
       if (!ok) return;
     }
 
@@ -502,7 +524,7 @@ export default function DashboardPage() {
         p_workout_type: activity,
         p_team_id: null,
         p_duration: duration === "" ? null : Number(duration),
-        p_distance: distance === "" ? null : (distance as number),
+        p_distance: distance === "" ? null : Number(distance),
         p_steps: steps === "" ? null : Number(steps),
         p_holes: holes === "" ? null : Number(holes),
         p_proof_url: proofUrl,
@@ -759,7 +781,16 @@ export default function DashboardPage() {
             )}
             <div className="space-y-3">
               <label className="block text-sm font-medium text-gray-700">Workout Date</label>
-              <input value={date} readOnly type="date" className="w-full border rounded-md px-3 py-2 bg-gray-100 text-gray-700" />
+              <select value={date} onChange={(e)=> setDate(e.target.value)} className="w-full border rounded-md px-3 py-2 bg-white">
+                {(() => {
+                  const today = todayStr();
+                  const y = yesterdayLocalStr();
+                  const opts: Array<{value:string; label:string}> = [];
+                  if (today >= SEASON_START_LOCAL_STR && today <= SEASON_END_LOCAL_STR) opts.push({ value: today, label: 'Today' });
+                  if (y >= SEASON_START_LOCAL_STR && y <= SEASON_END_LOCAL_STR) opts.push({ value: y, label: 'Yesterday' });
+                  return opts.map(opt => <option key={opt.value} value={opt.value}>{opt.label} ({opt.value})</option>);
+                })()}
+              </select>
               <label className="block text-sm font-medium text-gray-700">Workout Type</label>
               <select value={activity} onChange={(e)=>setActivity(e.target.value)} className="w-full border rounded-md px-3 py-2">
                 <option value="run">Brisk Walk/Jog/Run</option>
@@ -783,7 +814,15 @@ export default function DashboardPage() {
                   <div className={currentConfig.fields.length === 1 ? 'col-span-2' : 'flex items-end gap-2'}>
                     <div className="flex-1">
                       <label className="block text-sm font-medium text-gray-700">Duration (mins){currentConfig.minDuration ? ` — min ${currentConfig.minDuration}` : ''}</label>
-                      <input value={duration ?? ''} onChange={(e)=>{ setDuration(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
+                      <input value={duration ?? ''} onChange={(e)=>{
+                        const val = e.target.value.trim();
+                        if (val === '' || isIntString(val)) {
+                          setDuration(val === '' ? '' : Number(val));
+                          setValidationError("");
+                        } else {
+                          setValidationError("Enter numbers only (no letters)");
+                        }
+                      }} inputMode="numeric" pattern="\\d*" min={0} className="w-full border rounded-md px-3 py-2" />
                     </div>
                     {currentConfig.fields.length > 1 && <div className="pb-2 text-xs font-semibold text-gray-600">OR</div>}
                   </div>
@@ -791,7 +830,17 @@ export default function DashboardPage() {
                 {currentConfig.fields.includes('distance') && (
                   <div className={currentConfig.fields.length === 1 ? 'col-span-2' : 'flex-1'}>
                     <label className="block text-sm font-medium text-gray-700">Distance (km){currentConfig.minDistance ? ` — min ${currentConfig.minDistance}` : ''}</label>
-                    <input value={distance ?? ''} onChange={(e)=>{ setDistance(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} step="0.1" className="w-full border rounded-md px-3 py-2" />
+                    <input value={typeof distance === 'number' ? String(distance) : distance} onChange={(e)=>{
+                      const raw = e.target.value;
+                      const val = raw.trim();
+                      if (val === '' || isDecimalString(val)) {
+                        // keep as string while typing to preserve decimal point
+                        setDistance(val);
+                        setValidationError("");
+                      } else {
+                        setValidationError("Enter numbers only (no letters)");
+                      }
+                    }} inputMode="decimal" min={0} step="0.1" className="w-full border rounded-md px-3 py-2" />
                   </div>
                 )}
               {activity === 'golf' ? (
@@ -804,13 +853,29 @@ export default function DashboardPage() {
                     {currentConfig.fields.includes('steps') && (
                       <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
                         <label className="block text-sm font-medium text-gray-700">Steps{currentConfig.minSteps ? ` — min ${currentConfig.minSteps.toLocaleString()}` : ''}</label>
-                        <input value={steps ?? ''} onChange={(e)=>{ setSteps(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
+                        <input value={steps ?? ''} onChange={(e)=>{
+                          const val = e.target.value.trim();
+                          if (val === '' || isIntString(val)) {
+                            setSteps(val === '' ? '' : Number(val));
+                            setValidationError("");
+                          } else {
+                            setValidationError("Enter numbers only (no letters)");
+                          }
+                        }} inputMode="numeric" pattern="\\d*" min={0} className="w-full border rounded-md px-3 py-2" />
                       </div>
                     )}
                     {currentConfig.fields.includes('holes') && (
                       <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
                         <label className="block text-sm font-medium text-gray-700">Holes (golf){currentConfig.minHoles ? ` — min ${currentConfig.minHoles}` : ''}</label>
-                        <input value={holes ?? ''} onChange={(e)=>{ setHoles(e.target.value === '' ? '' : Number(e.target.value)); setValidationError(""); }} type="number" min={0} className="w-full border rounded-md px-3 py-2" />
+                  <input value={holes ?? ''} onChange={(e)=>{
+                    const val = e.target.value.trim();
+                    if (val === '' || isIntString(val)) {
+                      setHoles(val === '' ? '' : Number(val));
+                      setValidationError("");
+                    } else {
+                      setValidationError("Enter numbers only (no letters)");
+                    }
+                  }} inputMode="numeric" pattern="\\d*" min={0} className="w-full border rounded-md px-3 py-2" />
                       </div>
                     )}
                   </>
@@ -848,7 +913,16 @@ export default function DashboardPage() {
               <div className="text-sm text-rfl-navy font-semibold">You are taking a rest day. You have {Math.max(0, 18 - myRestUsed)} / 18 rest days left.</div>
               <div className="text-sm text-gray-700">Rest days remaining: <span className="font-semibold">{Math.max(0, 18 - myRestUsed)}</span> / 18</div>
               <label className="block text-sm font-medium text-gray-700">Workout Date</label>
-              <input value={date} readOnly type="date" className="w-full border rounded-md px-3 py-2 bg-gray-100 text-gray-700" />
+              <select value={date} onChange={(e)=> setDate(e.target.value)} className="w-full border rounded-md px-3 py-2 bg-white">
+                {(() => {
+                  const today = todayStr();
+                  const y = yesterdayLocalStr();
+                  const opts: Array<{value:string; label:string}> = [];
+                  if (today >= SEASON_START_LOCAL_STR && today <= SEASON_END_LOCAL_STR) opts.push({ value: today, label: 'Today' });
+                  if (y >= SEASON_START_LOCAL_STR && y <= SEASON_END_LOCAL_STR) opts.push({ value: y, label: 'Yesterday' });
+                  return opts.map(opt => <option key={opt.value} value={opt.value}>{opt.label} ({opt.value})</option>);
+                })()}
+              </select>
             </div>
             <div className="mt-6 flex justify-end gap-3">
               <Button variant="outline" onClick={() => setOpenRest(false)}>Back</Button>
