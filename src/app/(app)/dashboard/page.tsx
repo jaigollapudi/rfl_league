@@ -497,7 +497,7 @@ export default function DashboardPage() {
     }
     if (date === y) {
       const { data: existingY } = await getSupabase().from('entries').select('id,status').eq('user_id', userId).eq('date', y).maybeSingle();
-      if (!existingY || existingY.status !== 'rejected') { alert('You can only re-submit for yesterday if your previous entry was rejected.'); return; }
+      if (!existingY || existingY.status !== 'rejected') { alert('You cannot submit yesterday’s workout unless your submission yesterday was rejected.'); return; }
       const ok = window.confirm("You're about to overwrite your rejected entry from yesterday. Continue?");
       if (!ok) return;
     }
