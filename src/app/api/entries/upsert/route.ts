@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
     const rr = Math.max(rrDur, rrDist);
     payload.rr_value = Math.min(rr, 2.5);
   } else if (typeof duration === 'number') {
-    // gym, yoga, swimming, field, meditation
+    // gym, yoga, swimming, badminton_pickleball, basketball_cricket, meditation
     payload.rr_value = Math.min(duration / baseDuration, 2.5);
   } else payload.rr_value = 1.0;
 

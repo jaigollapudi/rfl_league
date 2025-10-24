@@ -126,8 +126,14 @@ const ACTIVITY_CONFIGS: Record<string, ActivityConfig> = {
     rules: ["45 mins minimum"],
     minDuration: 45,
   },
-  field: {
-    name: "Field Sports",
+  badminton_pickleball: {
+    name: "Badminton/Pickleball",
+    fields: ['duration'],
+    rules: ["45 mins minimum"],
+    minDuration: 45,
+  },
+  basketball_cricket: {
+    name: "Basketball/Cricket",
     fields: ['duration'],
     rules: ["45 mins minimum"],
     minDuration: 45,
@@ -160,7 +166,7 @@ export default function DashboardPage() {
   const [openWorkout, setOpenWorkout] = useState(false);
   const [openRest, setOpenRest] = useState(false);
   const [date, setDate] = useState<string>(todayStr());
-  const [activity, setActivity] = useState("gym");
+  const [activity, setActivity] = useState("steps");
   const [duration, setDuration] = useState<number | "">(45);
   const [distance, setDistance] = useState<string | number>("");
   const [steps, setSteps] = useState<number | "">("");
@@ -798,7 +804,8 @@ export default function DashboardPage() {
                 <option value="yoga">Yoga/Pilates/Zumba</option>
                 <option value="cycling">Cycling</option>
                 <option value="swimming">Swimming</option>
-                <option value="field">Field Sports</option>
+                <option value="badminton_pickleball">Badminton/Pickleball</option>
+                <option value="basketball_cricket">Basketball/Cricket</option>
                 <option value="steps">Steps</option>
                 <option value="golf">Golf</option>
                 {isSeniorEffective && <option value="meditation">Meditation/Chanting/Breathing</option>}
