@@ -532,6 +532,8 @@ export default function TeamPage() {
                       <div className="hidden sm:flex shrink-0 gap-2">
                         <button className="px-3 py-1 rounded border text-blue-700 border-blue-300 hover:bg-blue-50" onClick={()=> setPreviewEntry(e)}>View</button>
                         <button className="px-3 py-1 rounded border text-red-700 border-red-300 hover:bg-red-50" onClick={async()=>{
+                          const confirmed = window.confirm(`Are you sure you want to reject ${e.accounts.first_name}'s entry? This action cannot be undone.`);
+                          if (!confirmed) return;
                           await getSupabase().from('entries').update({ status: 'rejected' }).eq('id', e.id);
                           setPending(p=>p.filter(x=>x.id!==e.id));
                           if (teamId) { await loadMembersSummary(teamId); await loadPending(teamId, page); }
@@ -542,6 +544,8 @@ export default function TeamPage() {
                     <div className="mt-2 flex sm:hidden gap-2">
                       <button className="flex-1 py-2 rounded border text-blue-700 border-blue-300 hover:bg-blue-50" onClick={()=> setPreviewEntry(e)}>View</button>
                       <button className="flex-1 py-2 rounded border text-red-700 border-red-300 hover:bg-red-50" onClick={async()=>{
+                        const confirmed = window.confirm(`Are you sure you want to reject ${e.accounts.first_name}'s entry? This action cannot be undone.`);
+                        if (!confirmed) return;
                         await getSupabase().from('entries').update({ status: 'rejected' }).eq('id', e.id);
                         setPending(p=>p.filter(x=>x.id!==e.id));
                         if (teamId) { await loadMembersSummary(teamId); await loadPending(teamId, page); }
