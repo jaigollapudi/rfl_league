@@ -57,15 +57,15 @@ function addDaysUTC(d: Date, days: number): Date {
 
 // Fixed season window: Oct 25, 2025 → Jan 23, 2026
 function seasonFixedStart(): Date {
-  return new Date(Date.UTC(2025, 9, 23)); // Oct 23, 2025
+  return new Date(Date.UTC(2025, 9, 25)); // Oct 25, 2025
 }
 function seasonFixedEnd(): Date {
   return new Date(Date.UTC(2026, 0, 23)); // Jan = 0
 }
-const SEASON_START_LOCAL_STR = '2025-10-23';
+const SEASON_START_LOCAL_STR = '2025-10-25';
 const SEASON_END_LOCAL_STR = '2026-01-23';
 function firstWeekStart(_year: number): Date {
-  // Week 1 starts exactly on season start (Oct 23, 2025 - Thursday)
+  // Week 1 starts exactly on season start (Oct 25, 2025 - Saturday)
   return seasonFixedStart();
 }
 function seasonEndStart(_year: number): Date {
@@ -196,11 +196,13 @@ export default function DashboardPage() {
   const sessionAge = (session?.user as any)?.age as number | undefined;
   const isSeniorEffective = (typeof sessionAge === 'number' && sessionAge >= 65) || isSenior;
   const PROOF_BUCKET = (process.env.NEXT_PUBLIC_PROOF_BUCKET as string) || 'rofl_proof_pics';
-  const canLogToday = useMemo(() => {
+  // Compute on client after mount to avoid SSR timezone discrepancies
+  const [canLogToday, setCanLogToday] = useState<boolean>(false);
+  useEffect(() => {
     const t = todayStr();
-    return t >= SEASON_START_LOCAL_STR && t <= SEASON_END_LOCAL_STR;
+    setCanLogToday(t >= SEASON_START_LOCAL_STR && t <= SEASON_END_LOCAL_STR);
   }, []);
-  const seasonGuardMsg = 'Season runs Oct 23, 2025 to Jan 23, 2026. Logging opens on Oct 23.';
+  const seasonGuardMsg = 'Season runs Oct 25, 2025 to Jan 23, 2026. Logging opens on Oct 25.';
   
 
   const validateWorkout = useMemo(() => {
@@ -368,7 +370,7 @@ export default function DashboardPage() {
       const seasonStart = seasonFixedStart();
       const today = new Date();
       const seasonStartStr = SEASON_START_LOCAL_STR;
-      const todayStr = today.toISOString().split('T')[0];
+      const todayLocalStr = formatLocalYYYYMMDD(today);
 
       // Fetch all my approved entries for the season
       const { data: myEntries } = await getSupabase()
@@ -377,7 +379,7 @@ export default function DashboardPage() {
         .eq('user_id', userId)
         .eq('status', 'approved')
         .gte('date', seasonStartStr)
-        .lte('date', todayStr);
+        .lte('date', todayLocalStr);
 
       const entries = (myEntries || []) as Array<{ type: string; rr_value: number | null; date: string }>;
 
@@ -392,7 +394,7 @@ export default function DashboardPage() {
       let missed = 0;
       let cur = new Date(seasonStart);
       while (cur.getTime() <= today.getTime()) {
-        const ds = cur.toISOString().split('T')[0];
+        const ds = formatLocalYYYYMMDD(new Date(cur));
         if (!byDate.has(ds)) missed += 1;
         cur = new Date(cur.getTime() + 24 * 3600 * 1000);
       }
@@ -422,7 +424,7 @@ export default function DashboardPage() {
       const seasonStart = seasonFixedStart();
       const today = new Date();
       const seasonStartStr = SEASON_START_LOCAL_STR;
-      const todayStr = today.toISOString().split('T')[0];
+      const todayLocalStr = formatLocalYYYYMMDD(today);
       
       // Fetch team members
       const { data: teamUsers } = await getSupabase()
@@ -438,7 +440,7 @@ export default function DashboardPage() {
         .eq('team_id', effectiveTeamId)
         .eq('status', 'approved')
         .gte('date', seasonStartStr)
-        .lte('date', todayStr);
+        .lte('date', todayLocalStr);
       const entries = (data || []) as Array<{ id: string; user_id: string; date: string; type: string | null; rr_value: number | null }>;
       const teamPts = entries.length; // every approved entry counts 1
       const rrVals = entries.map(e => (typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0))).filter(v => v > 0);
@@ -453,7 +455,7 @@ export default function DashboardPage() {
       {
         let day = new Date(seasonStart);
         while (day.getTime() <= today.getTime()) {
-          const ds = day.toISOString().split('T')[0];
+          const ds = formatLocalYYYYMMDD(new Date(day));
           memberSet.forEach((uid)=>{ if (!byDateUser.has(`${ds}|${uid}`)) missed += 1; });
           day = new Date(day.getTime() + 24 * 3600 * 1000);
         }
@@ -513,13 +515,13 @@ export default function DashboardPage() {
       // 1) Upload proof image to Supabase Storage (required)
       let proofUrl: string | null = null;
       if (proofFile) {
-        const safeName = proofFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-        const filePath = `${userId}/${date}/${Date.now()}-${safeName}`;
-        const { error: uploadErr } = await getSupabase().storage.from(PROOF_BUCKET).upload(filePath, proofFile, {
-          cacheControl: '3600', upsert: true, contentType: proofFile.type || 'image/jpeg'
-        });
-        if (uploadErr) { setProofError('Upload failed, please try again.'); throw uploadErr; }
-        const { data: pub } = getSupabase().storage.from(PROOF_BUCKET).getPublicUrl(filePath);
+      const safeName = proofFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filePath = `${userId}/${date}/${Date.now()}-${safeName}`;
+      const { error: uploadErr } = await getSupabase().storage.from(PROOF_BUCKET).upload(filePath, proofFile, {
+        cacheControl: '3600', upsert: true, contentType: proofFile.type || 'image/jpeg'
+      });
+      if (uploadErr) { setProofError('Upload failed, please try again.'); throw uploadErr; }
+      const { data: pub } = getSupabase().storage.from(PROOF_BUCKET).getPublicUrl(filePath);
         proofUrl = pub?.publicUrl || null;
       }
 
@@ -593,7 +595,7 @@ export default function DashboardPage() {
         <div className="max-w-4xl mx-auto">
           <h1 className="text-3xl font-bold text-rfl-navy mb-2">Welcome, {session?.user?.name?.split(' ')[0] || 'User'}!</h1>
           <p className="text-gray-600">Let's crush those fitness goals today 💪</p>
-        </div>
+      </div>
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -623,11 +625,11 @@ export default function DashboardPage() {
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Rest Days Used</div>
                   <div className="text-lg font-bold text-rfl-navy">{myRestUsed}</div>
-                </div>
+                  </div>
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Rest Days Unused</div>
                   <div className="text-lg font-bold text-rfl-navy">{Math.max(0, 18 - myRestUsed)}</div>
-                </div>
+                  </div>
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Days Missed</div>
                   <div className="text-lg font-bold text-rfl-navy">{myMissedDays}</div>
@@ -668,23 +670,23 @@ export default function DashboardPage() {
             </div>
             
             {/* Team Summary */}
-            <div className="rounded-lg border bg-white p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="text-sm font-semibold text-rfl-navy">Team Summary {teamName ? `— ${teamName}` : ''}</div>
-                {teamPosition ? (
-                  <div className="text-xs px-2 py-0.5 rounded-full bg-rfl-coral text-white">Position #{teamPosition}</div>
-                ) : null}
-              </div>
+              <div className="rounded-lg border bg-white p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-sm font-semibold text-rfl-navy">Team Summary {teamName ? `— ${teamName}` : ''}</div>
+                  {teamPosition ? (
+                    <div className="text-xs px-2 py-0.5 rounded-full bg-rfl-coral text-white">Position #{teamPosition}</div>
+                  ) : null}
+                </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
-                <div className="p-3 bg-rfl-peach/50 rounded">
+                  <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Points</div>
-                  <div className="text-lg font-bold text-rfl-coral">{teamPoints ?? '—'}</div>
-                </div>
-                <div className="p-3 bg-rfl-peach/50 rounded">
-                  <div className="text-xs text-gray-600">Avg RR</div>
-                  <div className="text-lg font-bold text-rfl-navy">{teamAvgRR !== null ? Number(teamAvgRR).toFixed(2) : '—'}</div>
-                </div>
-                <div className="p-3 bg-rfl-peach/50 rounded">
+                    <div className="text-lg font-bold text-rfl-coral">{teamPoints ?? '—'}</div>
+                  </div>
+                  <div className="p-3 bg-rfl-peach/50 rounded">
+                    <div className="text-xs text-gray-600">Avg RR</div>
+                    <div className="text-lg font-bold text-rfl-navy">{teamAvgRR !== null ? Number(teamAvgRR).toFixed(2) : '—'}</div>
+                  </div>
+                  <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Days Missed</div>
                   <div className="text-lg font-bold text-rfl-navy">{teamMissedWeek}</div>
                 </div>
@@ -820,7 +822,7 @@ export default function DashboardPage() {
                 {currentConfig.fields.includes('duration') && (
                   <div className={currentConfig.fields.length === 1 ? 'col-span-2' : 'flex items-end gap-2'}>
                     <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700">Duration (mins){currentConfig.minDuration ? ` — min ${currentConfig.minDuration}` : ''}</label>
+                    <label className="block text-sm font-medium text-gray-700">Duration (mins){currentConfig.minDuration ? ` — min ${currentConfig.minDuration}` : ''}</label>
                       <input value={duration ?? ''} onChange={(e)=>{
                         const val = e.target.value.trim();
                         if (val === '' || isIntString(val)) {
@@ -857,9 +859,9 @@ export default function DashboardPage() {
                 </div>
               ) : (
                   <>
-                    {currentConfig.fields.includes('steps') && (
-                      <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
-                        <label className="block text-sm font-medium text-gray-700">Steps{currentConfig.minSteps ? ` — min ${currentConfig.minSteps.toLocaleString()}` : ''}</label>
+                {currentConfig.fields.includes('steps') && (
+                  <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
+                    <label className="block text-sm font-medium text-gray-700">Steps{currentConfig.minSteps ? ` — min ${currentConfig.minSteps.toLocaleString()}` : ''}</label>
                         <input value={steps ?? ''} onChange={(e)=>{
                           const val = e.target.value.trim();
                           if (val === '' || isIntString(val)) {
@@ -869,11 +871,11 @@ export default function DashboardPage() {
                             setValidationError("Enter numbers only (no letters)");
                           }
                         }} inputMode="numeric" pattern="\\d*" min={0} className="w-full border rounded-md px-3 py-2" />
-                      </div>
-                    )}
-                    {currentConfig.fields.includes('holes') && (
-                      <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
-                        <label className="block text-sm font-medium text-gray-700">Holes (golf){currentConfig.minHoles ? ` — min ${currentConfig.minHoles}` : ''}</label>
+                  </div>
+                )}
+                {currentConfig.fields.includes('holes') && (
+                  <div className={currentConfig.fields.length === 1 ? 'col-span-2' : ''}>
+                    <label className="block text-sm font-medium text-gray-700">Holes (golf){currentConfig.minHoles ? ` — min ${currentConfig.minHoles}` : ''}</label>
                   <input value={holes ?? ''} onChange={(e)=>{
                     const val = e.target.value.trim();
                     if (val === '' || isIntString(val)) {
@@ -883,7 +885,7 @@ export default function DashboardPage() {
                       setValidationError("Enter numbers only (no letters)");
                     }
                   }} inputMode="numeric" pattern="\\d*" min={0} className="w-full border rounded-md px-3 py-2" />
-                      </div>
+                  </div>
                     )}
                   </>
                 )}

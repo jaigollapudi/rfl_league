@@ -109,27 +109,33 @@ export default function LeaderboardsPage() {
     })();
   }, [page]);
 
-  // Utilities for period boundaries
-  const seasonStartDate = useMemo(() => new Date(Date.UTC(2025, 9, 23)), []); // Oct 23 2025 UTC
-  const todayUtc = () => new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-  const ymd = (d: Date) => d.toISOString().split('T')[0];
-  const addDaysUTC = (d: Date, n: number) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + n));
+  // Utilities for period boundaries (LOCAL date semantics to avoid UTC drift)
+  const seasonStartDate = useMemo(() => new Date(2025, 9, 25), []); // Oct 25 2025 (local)
+  const startOfLocalDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const todayLocal = () => startOfLocalDay(new Date());
+  const ymdLocal = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const addDaysLocal = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 
   // Period dropdown options (Overall + completed/in-progress weeks)
   const periodOptions = useMemo(() => {
     const opts: Array<{ value: string; label: string; start: Date; end: Date }> = [];
     const start = seasonStartDate;
-    const today = todayUtc();
+    const today = todayLocal();
     opts.push({ value: 'overall', label: 'Season Total', start, end: today });
     // Build week ranges starting at seasonStartDate in 7-day buckets
     let wkStart = new Date(start);
     let weekNum = 1;
     while (wkStart <= today) {
-      const wkEnd = addDaysUTC(wkStart, 6);
+      const wkEnd = addDaysLocal(wkStart, 6);
       const shownEnd = wkEnd <= today ? wkEnd : today;
       const label = `Week ${weekNum}`;
       opts.push({ value: `week-${weekNum}`, label, start: new Date(wkStart), end: shownEnd });
-      wkStart = addDaysUTC(wkStart, 7);
+      wkStart = addDaysLocal(wkStart, 7);
       weekNum++;
     }
     return opts;
@@ -146,7 +152,7 @@ export default function LeaderboardsPage() {
       setStandings([]); // Clear the table immediately when period changes
       const start = currentPeriod.start;
       const end = currentPeriod.end;
-      const prevEnd = ymd(end) === ymd(start) ? null : addDaysUTC(end, -1);
+      const prevEnd = ymdLocal(end) === ymdLocal(start) ? null : addDaysLocal(end, -1);
 
       // Fetch teams
       const { data: allTeams } = await getSupabase().from('teams').select('id, name');
@@ -162,8 +168,8 @@ export default function LeaderboardsPage() {
             .select('type, rr_value, date')
             .eq('team_id', tid)
             .eq('status', 'approved')
-            .gte('date', ymd(s))
-            .lte('date', ymd(e));
+            .gte('date', ymdLocal(s))
+            .lte('date', ymdLocal(e));
           const ents = (entries || []) as Array<{ type: string; rr_value: number | null }>;        
           let pts = 0; let rrSum = 0; let rrCnt = 0;
           ents.forEach(e2 => {
