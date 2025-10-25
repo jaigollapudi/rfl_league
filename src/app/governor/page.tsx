@@ -44,6 +44,8 @@ export default function GovernorPage() {
   const [restDaysByUser, setRestDaysByUser] = useState<Record<string, number>>({});
   const [missedDaysByUser, setMissedDaysByUser] = useState<Record<string, number>>({});
   const [teamMembers, setTeamMembers] = useState<Account[]>([]);
+  const [ilbPage, setIlbPage] = useState<number>(1);
+  const ilbPageSize = 10;
 
   // Gate by role and compute as-of (yesterday local)
   useEffect(() => {
@@ -203,6 +205,19 @@ export default function GovernorPage() {
     return Object.entries(by).map(([workout_type, v]) => ({ workout_type, ...v })).sort((a,b)=> b.entries - a.entries);
   }, [entriesForAggregates]);
 
+  // Sorted individual leaderboard and pagination (as of yesterday)
+  const sortedIndividuals = useMemo(() => {
+    return (individualLeaderboard || [])
+      .slice()
+      .sort((a,b)=> (Number(b.points)-Number(a.points)) || (Number(b.avg_rr||0)-Number(a.avg_rr||0)));
+  }, [individualLeaderboard]);
+  const ilbTotalPages = Math.max(1, Math.ceil(sortedIndividuals.length / ilbPageSize));
+  const ilbPageSafe = Math.min(Math.max(ilbPage, 1), ilbTotalPages);
+  const ilbSlice = useMemo(() => {
+    const from = (ilbPageSafe - 1) * ilbPageSize; const to = from + ilbPageSize;
+    return sortedIndividuals.slice(from, to);
+  }, [sortedIndividuals, ilbPageSafe]);
+
   if (status === 'loading' || loading || !asOf) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-6">
@@ -248,7 +263,37 @@ export default function GovernorPage() {
         </div>
       </div>
 
-      {/* Card 2: Team drilldown */}
+      {/* Card 2: Aggregate activity snapshot (moved up under leaderboard) */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <h2 className="text-base font-semibold mb-3">League Activity Snapshot (Aggregate)</h2>
+        <div className="overflow-x-auto pb-2">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="text-left text-gray-600">
+              <tr>
+                <th className="py-2 px-2">Activity</th>
+                <th className="py-2 px-2 text-right">Entries</th>
+                <th className="py-2 px-2 text-right">Total Duration</th>
+                <th className="py-2 px-2 text-right">Total Distance</th>
+                <th className="py-2 px-2 text-right">Total Steps</th>
+              </tr>
+            </thead>
+            <tbody>
+              {aggregates.map((r) => (
+                <tr key={r.workout_type} className="border-t">
+                  <td className="py-2 px-2 whitespace-nowrap">{r.workout_type}</td>
+                  <td className="py-2 px-2 text-right whitespace-nowrap [font-variant-numeric:tabular-nums]">{r.entries}</td>
+                  <td className="py-2 px-2 text-right whitespace-nowrap [font-variant-numeric:tabular-nums]">{r.duration}</td>
+                  <td className="py-2 px-2 text-right whitespace-nowrap [font-variant-numeric:tabular-nums]">{r.distance}</td>
+                  <td className="py-2 px-2 text-right whitespace-nowrap [font-variant-numeric:tabular-nums]">{r.steps}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-2 text-xs text-gray-500">Season-to-date through {asOf}</div>
+      </div>
+
+      {/* Card 3: Team drilldown */}
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold">Team Summary (Players)</h2>
@@ -292,7 +337,7 @@ export default function GovernorPage() {
         </div>
       </div>
 
-      {/* Card 3: Individual leaderboard (league-wide) */}
+      {/* Card 4: Individual leaderboard (league-wide) with pagination */}
       <div className="bg-white rounded-lg shadow p-4">
         <h2 className="text-base font-semibold mb-3">Individual Leaderboard</h2>
         <div className="overflow-x-auto">
@@ -308,12 +353,10 @@ export default function GovernorPage() {
               </tr>
             </thead>
             <tbody>
-              {individualLeaderboard
-                .slice()
-                .sort((a,b)=> (Number(b.points)-Number(a.points)) || (Number(b.avg_rr||0)-Number(a.avg_rr||0)))
+              {ilbSlice
                 .map((u, idx) => (
                   <tr key={String(u.user_id)} className="border-t hover:bg-gray-50">
-                    <td className="py-2 pr-2 [font-variant-numeric:tabular-nums] font-bold text-rfl-navy">{idx+1}</td>
+                    <td className="py-2 pr-2 [font-variant-numeric:tabular-nums] font-bold text-rfl-navy">{(ilbPageSafe - 1) * ilbPageSize + idx + 1}</td>
                     <td className="py-2 pr-2">
                       <div className="font-medium">{(u as any).first_name ?? 'Player'} {(u as any).last_name ?? ''}</div>
                       {u.team_name && <div className="text-xs text-gray-500">{u.team_name}</div>}
@@ -324,42 +367,31 @@ export default function GovernorPage() {
                     <td className="py-2 pr-2 text-right">{missedDaysByUser[String(u.user_id)] ?? 0}</td>
                   </tr>
                 ))}
-              {!individualLeaderboard.length && (
+              {!sortedIndividuals.length && (
                 <tr><td colSpan={6} className="py-8 text-center text-gray-500">No data yet.</td></tr>
               )}
             </tbody>
           </table>
         </div>
-      </div>
-
-      {/* Card 4: Aggregate activity snapshot */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <h2 className="text-base font-semibold mb-3">League Activity Snapshot (Aggregate)</h2>
-        <div className="overflow-x-auto pb-2">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead className="text-left text-gray-600">
-              <tr>
-                <th className="py-2 px-2">Activity</th>
-                <th className="py-2 px-2 text-right">Entries</th>
-                <th className="py-2 px-2 text-right">Total Duration</th>
-                <th className="py-2 px-2 text-right">Total Distance</th>
-                <th className="py-2 px-2 text-right">Total Steps</th>
-              </tr>
-            </thead>
-            <tbody>
-              {aggregates.map((r) => (
-                <tr key={r.workout_type} className="border-t">
-                  <td className="py-2 px-2 whitespace-nowrap">{r.workout_type}</td>
-                  <td className="py-2 px-2 text-right whitespace-nowrap [font-variant-numeric:tabular-nums]">{r.entries}</td>
-                  <td className="py-2 px-2 text-right whitespace-nowrap [font-variant-numeric:tabular-nums]">{r.duration}</td>
-                  <td className="py-2 px-2 text-right whitespace-nowrap [font-variant-numeric:tabular-nums]">{r.distance}</td>
-                  <td className="py-2 px-2 text-right whitespace-nowrap [font-variant-numeric:tabular-nums]">{r.steps}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-3 flex items-center justify-between">
+          <div className="text-xs text-gray-600">Page {ilbPageSafe} of {ilbTotalPages}</div>
+          <div className="flex items-center gap-2">
+            <button
+              className={`px-3 py-1 rounded border text-sm ${ilbPageSafe<=1 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+              onClick={() => setIlbPage(p => Math.max(1, p-1))}
+              disabled={ilbPageSafe<=1}
+            >
+              Prev
+            </button>
+            <button
+              className={`px-3 py-1 rounded border text-sm ${ilbPageSafe>=ilbTotalPages ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+              onClick={() => setIlbPage(p => Math.min(ilbTotalPages, p+1))}
+              disabled={ilbPageSafe>=ilbTotalPages}
+            >
+              Next
+            </button>
+          </div>
         </div>
-        <div className="mt-2 text-xs text-gray-500">Season-to-date through {asOf}</div>
       </div>
     </div>
   )
