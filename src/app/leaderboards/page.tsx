@@ -2,6 +2,8 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Volume2, VolumeX } from 'lucide-react';
 import { getSupabase } from "@/lib/supabase";
 
@@ -18,6 +20,14 @@ type TeamStanding = {
 };
 
 export default function LeaderboardsPage() {
+  const { data: session } = useSession();
+  const router = useRouter();
+  const role = (session?.user as any)?.role as 'player' | 'leader' | 'governor' | undefined;
+  useEffect(() => {
+    if (role === 'governor') {
+      router.replace('/governor');
+    }
+  }, [role, router]);
   const [teams, setTeams] = useState<TeamRow[]>([]);
   const [players, setPlayers] = useState<PlayerRow[]>([]);
   const [playersTotal, setPlayersTotal] = useState<number>(0);

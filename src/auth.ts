@@ -8,7 +8,7 @@ declare module "next-auth" {
     user: {
       id: string;
       name: string;
-      role: "player" | "leader";
+      role: "player" | "leader" | "governor";
       age?: number | null;
     };
   }
@@ -45,9 +45,9 @@ const authConfig = {
           return {
             id: acct.id,
             name: acct.first_name,
-            role: acct.role as "player" | "leader",
+            role: acct.role as "player" | "leader" | "governor",
             age: (acct as any)?.age ?? null,
-          } as { id: string; name: string; role: "player" | "leader"; age?: number | null };
+          } as { id: string; name: string; role: "player" | "leader" | "governor"; age?: number | null };
         }
         return null;
       },
@@ -58,7 +58,7 @@ const authConfig = {
       if (user) {
         token.id = (user as unknown as { id: string }).id;
         token.name = user.name;
-        token.role = (user as unknown as { role: "player" | "leader" }).role;
+        token.role = (user as unknown as { role: "player" | "leader" | "governor" }).role;
         token.age = (user as any)?.age ?? null;
       }
       return token;
@@ -67,7 +67,7 @@ const authConfig = {
       session.user = {
         id: String(token.id || ""),
         name: String(token.name || ""),
-        role: (token as { role?: "player" | "leader" }).role || "player",
+        role: (token as { role?: "player" | "leader" | "governor" }).role || "player",
         age: (token as any)?.age ?? null,
       };
       return session;

@@ -203,6 +203,7 @@ export function Navbar() {
   const pathname = usePathname()
   const { data: session } = useSession()
   const name = session?.user?.name ?? null
+  const role = (session?.user as any)?.role as 'player' | 'leader' | 'governor' | undefined
   const [mobileOpen, setMobileOpen] = useState(false)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [teamName, setTeamName] = useState<string | null>(null)
@@ -267,6 +268,97 @@ export function Navbar() {
     // We can't synchronously check file existence on client; return first candidate.
     // The <img> has onError fallback to placeholder.
     return candidates[0]
+  }
+
+  // Minimal header for governors only
+  if (role === 'governor') {
+    return (
+      <nav className="bg-rfl-navy text-white shadow-lg">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-lg overflow-hidden bg-white">
+                <img src="/img/PFL_Logo.jpeg" alt="PFL Logo" className="w-full h-full object-cover" />
+              </div>
+              <div className="text-sm sm:text-base">Welcome, {name ?? 'Governor'}</div>
+            </div>
+            {/* Desktop actions */}
+            <div className="hidden md:flex items-center gap-2">
+              {name ? (
+                <>
+                  <Button onClick={() => setShowPasswordModal(true)} variant="outline" size="sm" className="text-rfl-navy border-white hover:bg-white hover:text-rfl-navy">
+                    <Key className="w-4 h-4 mr-1" />
+                    Update Password
+                  </Button>
+                  <Button onClick={() => signOut({ callbackUrl: '/' })} variant="outline" size="sm" className="text-rfl-navy border-white hover:bg-white hover:text-rfl-navy flex items-center">
+                    <LogOut className="w-4 h-4 mr-1" />
+                    Sign Out
+                  </Button>
+                </>
+              ) : (
+                <Link href="/signin">
+                  <Button variant="outline" size="sm" className="text-rfl-navy border-white hover:bg-white hover:text-rfl-navy">Sign In</Button>
+                </Link>
+              )}
+            </div>
+            {/* Mobile hamburger */}
+            <button
+              className="md:hidden p-2 rounded hover:bg-rfl-light-blue/30"
+              aria-label="Open menu"
+              onClick={() => setMobileOpen(true)}
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+        {/* Mobile drawer */}
+        {mobileOpen && (
+          <div className="md:hidden fixed inset-0 z-50">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} />
+            <div className="absolute right-0 top-0 h-full w-64 bg-rfl-navy text-white shadow-xl">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded overflow-hidden bg-white">
+                    <img src="/img/PFL_Logo.jpeg" alt="PFL Logo" className="w-full h-full object-cover" />
+                  </div>
+                  <span className="text-sm">Welcome, {name ?? 'Governor'}</span>
+                </div>
+                <button className="p-2 rounded hover:bg-rfl-light-blue/30" aria-label="Close menu" onClick={() => setMobileOpen(false)}>
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="px-4 py-3 space-y-2">
+                {name ? (
+                  <>
+                    <button
+                      className="w-full text-left px-3 py-2 rounded-md bg-white text-rfl-navy font-medium flex items-center gap-2"
+                      onClick={() => { setMobileOpen(false); setShowPasswordModal(true); }}
+                    >
+                      <Key className="w-4 h-4" />
+                      Update Password
+                    </button>
+                    <button
+                      className="w-full text-left px-3 py-2 rounded-md bg-white text-rfl-navy font-medium flex items-center gap-2"
+                      onClick={() => { setMobileOpen(false); signOut({ callbackUrl: '/' }); }}
+                    >
+                      <LogOut className="w-4 h-4" />
+                      Sign Out
+                    </button>
+                  </>
+                ) : (
+                  <Link href="/signin" className="block px-3 py-2 rounded-md bg-white text-rfl-navy font-medium" onClick={() => setMobileOpen(false)}>
+                    Sign In
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        {showPasswordModal && (
+          <PasswordUpdateModal onClose={() => setShowPasswordModal(false)} userId={session?.user?.id} />
+        )}
+      </nav>
+    )
   }
 
   return (

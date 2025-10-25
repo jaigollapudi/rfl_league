@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Calendar, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { getSupabase } from "@/lib/supabase";
 import TeamProgressChart from "./TeamProgressChart";
@@ -160,7 +161,9 @@ const ACTIVITY_CONFIGS: Record<string, ActivityConfig> = {
 
 export default function DashboardPage() {
   const { data: session } = useSession();
+  const router = useRouter();
   const userId = session?.user?.id;
+  const role = (session?.user as any)?.role as 'player' | 'leader' | 'governor' | undefined;
   const [isSenior, setIsSenior] = useState<boolean>(false);
 
   const [openWorkout, setOpenWorkout] = useState(false);
@@ -196,6 +199,13 @@ export default function DashboardPage() {
   const sessionAge = (session?.user as any)?.age as number | undefined;
   const isSeniorEffective = (typeof sessionAge === 'number' && sessionAge >= 65) || isSenior;
   const PROOF_BUCKET = (process.env.NEXT_PUBLIC_PROOF_BUCKET as string) || 'rofl_proof_pics';
+  
+  // Governors should not see the player dashboard; redirect to governor view
+  useEffect(() => {
+    if (role === 'governor') {
+      router.replace('/governor');
+    }
+  }, [role, router]);
   // Compute on client after mount to avoid SSR timezone discrepancies
   const [canLogToday, setCanLogToday] = useState<boolean>(false);
   useEffect(() => {

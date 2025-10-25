@@ -2,6 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { getSupabase } from "@/lib/supabase";
 import { ChevronDown } from "lucide-react";
@@ -75,6 +76,14 @@ function getWeekNumber(seasonStart: Date, date: Date): number {
 
 export default function TeamPage() {
   const { data: session } = useSession();
+  const router = useRouter();
+  const role = (session?.user as any)?.role as 'player' | 'leader' | 'governor' | undefined;
+
+  useEffect(() => {
+    if (role === 'governor') {
+      router.replace('/governor');
+    }
+  }, [role, router]);
   const userId = session?.user?.id;
   const [teamId, setTeamId] = useState<string | null>(null);
   const [members, setMembers] = useState<MemberRow[]>([]);
