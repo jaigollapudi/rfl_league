@@ -63,62 +63,25 @@ export default function GovernorPage() {
       if (!asOf) return;
       setLoading(true);
       try {
-        // Teams list
+        // Teams list (for naming and ordering)
         const { data: tms } = await getSupabase().from('teams').select('id,name').order('name', { ascending: true });
         const teamList = (tms || []) as Team[];
         setTeams(teamList);
         if (!selectedTeamId && teamList.length) setSelectedTeamId(String(teamList[0].id));
 
-        // Team leaderboard up to asOf (season-to-date)
-        const { data: tLb } = await getSupabase().rpc('rfl_team_leaderboard', { p_start: SEASON_START, p_end: asOf });
-        setTeamLeaderboard(((tLb || []) as any[]).map(r => ({
-          team_id: String(r.team_id ?? r.id ?? ''),
-          team_name: String(r.team_name ?? r.name ?? ''),
-          points: Number(r.points ?? r.total_points ?? 0),
-          avg_rr: r.avg_rr ?? r.average_rr ?? null,
-          rest_days: r.rest_days ?? null,
-        })));
-
-        // Individual leaderboard league-wide up to asOf (enrich with names/teams)
-        const { data: iLb } = await getSupabase().rpc('rfl_individual_leaderboard', { p_start: SEASON_START, p_end: asOf });
-        const rawIndiv = ((iLb || []) as any[]) as Array<{ user_id: string; points: number; avg_rr: number | null }>;
-        // Include all accounts (players/leaders) so players with 0 entries appear
+        // Accounts (players + leaders) to ensure zero-entry users are included
         const { data: allAccounts } = await getSupabase().from('accounts').select('id, first_name, last_name, username, team_id, role');
-        const filteredAccounts = ((allAccounts||[]) as Array<{ id: string; first_name: string|null; last_name: string|null; username: string|null; team_id: string|null; role: string }>).
-          filter(a => (a.role === 'player' || a.role === 'leader'));
-        const userIds = filteredAccounts.map(a => String(a.id));
-        const { data: users } = userIds.length ? await getSupabase().from('accounts').select('id, first_name, last_name, username, team_id').in('id', userIds) : { data: [] } as { data: Array<{ id: string; first_name: string; last_name: string; username: string | null; team_id: string | null }> };
-        const teamIds = Array.from(new Set((users || []).map(u => String(u.team_id)).filter(Boolean)));
-        const { data: teamsMeta } = teamIds.length ? await getSupabase().from('teams').select('id, name').in('id', teamIds) : { data: [] } as { data: Array<{ id: string; name: string }> };
-        const teamNameById = new Map<string,string>();
-        (teamsMeta || []).forEach(t => teamNameById.set(String(t.id), String(t.name)));
-        const usersById = new Map((users || []).map(u => [String(u.id), u]));
-        const lbById = new Map<string, { points: number; avg_rr: number | null }>();
-        rawIndiv.forEach(r => lbById.set(String(r.user_id), { points: Number(r.points), avg_rr: r.avg_rr }));
-        const indiv: IndividualRow[] = filteredAccounts.map(a => {
-          const lb = lbById.get(String(a.id));
-          const tName = a.team_id ? (teamNameById.get(String(a.team_id)) || null) : null;
-          return {
-            user_id: String(a.id),
-            first_name: a.first_name || undefined,
-            last_name: a.last_name || undefined,
-            username: a.username || null,
-            team_id: a.team_id ? String(a.team_id) : undefined,
-            team_name: tName || undefined,
-            points: lb ? lb.points : 0,
-            avg_rr: lb ? lb.avg_rr : null,
-          } as IndividualRow;
-        });
-        setIndividualLeaderboard(indiv);
+        const filteredAccounts = ((allAccounts||[]) as Array<{ id: string; first_name: string|null; last_name: string|null; username: string|null; team_id: string|null; role: string }>)
+          .filter(a => (a.role === 'player' || a.role === 'leader'));
 
-        // Entries for aggregate snapshot by activity
+        // Entries for season-to-date up to asOf (yesterday local)
         const { data: ents } = await getSupabase()
           .from('entries')
-          .select('user_id,workout_type,duration,distance,steps,type,status,date')
+          .select('user_id,team_id,workout_type,duration,distance,steps,type,status,date,rr_value')
           .gte('date', SEASON_START)
           .lte('date', asOf)
           .eq('status', 'approved');
-        const all = (ents || []) as any[];
+        const all = (ents || []) as Array<{ user_id: string; team_id: string | null; type: string; rr_value: number | null; workout_type: string | null; duration: number | null; distance: number | null; steps: number | null; date: string }>;        
         setEntriesForAggregates(all);
         // Build rest-day counts per user for season to date through asOf
         const restMap: Record<string, number> = {};
@@ -144,6 +107,55 @@ export default function GovernorPage() {
           missedMap[uid] = Math.max(totalDays - done, 0);
         });
         setMissedDaysByUser(missedMap);
+
+        // Team aggregates from entries (points = count of approved entries; RR avg excluding zero values)
+        const teamAgg = new Map<string, { points: number; rrSum: number; rrCnt: number }>();
+        for (const e of all) {
+          const tid = String(e.team_id || '');
+          if (!tid) continue;
+          const rec = teamAgg.get(tid) || { points: 0, rrSum: 0, rrCnt: 0 };
+          rec.points += 1;
+          const rr = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
+          if (rr > 0) { rec.rrSum += rr; rec.rrCnt += 1; }
+          teamAgg.set(tid, rec);
+        }
+        const teamRows: TeamRow[] = teamList.map(t => {
+          const agg = teamAgg.get(String(t.id)) || { points: 0, rrSum: 0, rrCnt: 0 };
+          const avg = agg.rrCnt > 0 ? Math.round((agg.rrSum / agg.rrCnt) * 100) / 100 : 0;
+          return { team_id: String(t.id), team_name: String(t.name), points: agg.points, avg_rr: avg } as TeamRow;
+        });
+        setTeamLeaderboard(teamRows);
+
+        // Individual leaderboard from entries
+        const userAgg = new Map<string, { points: number; rrSum: number; rrCnt: number }>();
+        for (const e of all) {
+          const uid = String(e.user_id);
+          const rec = userAgg.get(uid) || { points: 0, rrSum: 0, rrCnt: 0 };
+          rec.points += 1;
+          const rr = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
+          if (rr > 0) { rec.rrSum += rr; rec.rrCnt += 1; }
+          userAgg.set(uid, rec);
+        }
+        const teamNameById = new Map<string,string>();
+        teamList.forEach(t => teamNameById.set(String(t.id), String(t.name)));
+        const indiv: IndividualRow[] = filteredAccounts.map(a => {
+          const agg = userAgg.get(String(a.id)) || { points: 0, rrSum: 0, rrCnt: 0 };
+          const avg = agg.rrCnt > 0 ? Math.round((agg.rrSum / agg.rrCnt) * 100) / 100 : 0;
+          const tName = a.team_id ? (teamNameById.get(String(a.team_id)) || null) : null;
+          return {
+            user_id: String(a.id),
+            first_name: a.first_name || undefined,
+            last_name: a.last_name || undefined,
+            username: a.username || null,
+            team_id: a.team_id ? String(a.team_id) : undefined,
+            team_name: tName || undefined,
+            points: agg.points,
+            avg_rr: avg,
+            rest_days: restMap[String(a.id)] || 0,
+            missed_days: missedMap[String(a.id)] || 0,
+          } as IndividualRow;
+        });
+        setIndividualLeaderboard(indiv);
       } finally {
         setLoading(false);
       }
