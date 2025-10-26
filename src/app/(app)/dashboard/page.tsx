@@ -6,7 +6,7 @@ import { Plus, Calendar, ChevronLeft, ChevronRight, TrendingUp } from "lucide-re
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { getSupabase } from "@/lib/supabase";
+import { getSupabase, calculateRR } from "@/lib/supabase";
 import TeamProgressChart from "./TeamProgressChart";
 
 type ActivityRow = {
@@ -520,6 +520,25 @@ export default function DashboardPage() {
       const ok = window.confirm("You're about to overwrite your rejected entry from yesterday. Continue?");
       if (!ok) return;
     }
+
+    // Pre-submit verification warning for high RR (>= 2)
+    try {
+      const predictedRR = calculateRR({
+        type: 'workout',
+        workout_type: activity as any,
+        duration: duration === "" ? undefined : Number(duration),
+        distance: distance === "" ? undefined : Number(distance),
+        steps: steps === "" ? undefined : Number(steps),
+        holes: holes === "" ? undefined : Number(holes),
+        age: sessionAge,
+      } as any);
+      if (predictedRR >= 2) {
+        const ok = window.confirm(
+          "Your workout looks long and has been selected for verification. Only active minutes count — any mismatch may reduce RR or lose points. Screenshot showing avg heart rate and calories is preferred"
+        );
+        if (!ok) return;
+      }
+    } catch {}
 
     setLoading(true);
     try {
