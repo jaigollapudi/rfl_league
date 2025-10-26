@@ -274,7 +274,7 @@ export default function GovernorPage() {
                   <tr key={t.team_id} className="border-t hover:bg-gray-50">
                     <td className="py-2 pr-2 [font-variant-numeric:tabular-nums] font-bold text-rfl-navy">{idx+1}</td>
                     <td className="py-2 pr-2 font-medium text-rfl-navy">{t.team_name}</td>
-                    <td className="py-2 pr-2 text-right [font-variant-numeric:tabular-nums] font-bold text-rfl-coral">{t.points}</td>
+                    <td className="py-2 pr-2 text-right [font-variant-numeric:tabular-nums] font-bold text-rfl-coral">{Math.round(t.points)}</td>
                     <td className="py-2 pr-2 text-right [font-variant-numeric:tabular-nums] font-semibold text-rfl-navy">{typeof t.avg_rr === 'number' ? t.avg_rr.toFixed(2) : '0.00'}</td>
                   </tr>
                 ))}

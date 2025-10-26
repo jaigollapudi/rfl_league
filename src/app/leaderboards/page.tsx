@@ -319,7 +319,7 @@ export default function LeaderboardsPage() {
                             <span className="font-medium text-rfl-navy text-sm whitespace-nowrap min-w-max">{t.teamName}</span>
                           </div>
                         </td>
-                        <td className="py-2 pr-2 text-right [font-variant-numeric:tabular-nums] font-bold text-rfl-coral text-sm w-16">{Number.isInteger(t.points) ? t.points : t.points.toFixed(2)}</td>
+                        <td className="py-2 pr-2 text-right [font-variant-numeric:tabular-nums] font-bold text-rfl-coral text-sm w-16">{Math.round(t.points)}</td>
                         <td className="py-2 pr-2 text-right [font-variant-numeric:tabular-nums] font-semibold text-rfl-navy text-sm w-16">{t.avgRR.toFixed(2)}</td>
                       </tr>
                     );

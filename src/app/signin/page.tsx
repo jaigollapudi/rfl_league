@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { Eye, EyeOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -27,7 +27,19 @@ export default function SignInPage() {
       return;
     }
     if (res?.ok) {
-      router.push("/dashboard");
+      // After successful sign-in, fetch session and route by role
+      let sess = await getSession();
+      if (!sess) {
+        // small retry in case the session token hasn't propagated yet
+        await new Promise((r) => setTimeout(r, 150));
+        sess = await getSession();
+      }
+      const role = (sess as any)?.user?.role as 'player' | 'leader' | 'governor' | undefined;
+      if (role === 'governor') {
+        router.push('/governor');
+      } else {
+        router.push('/dashboard');
+      }
       return;
     }
   };
