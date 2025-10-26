@@ -19,6 +19,13 @@ type TeamStanding = {
   delta: number; // position change vs previous day within the selected period (negative means moved up)
 };
 
+// Proportional points adjustment for 13-player teams (display-only)
+const THIRTEEN_PLAYER_TEAMS = new Set<string>([
+  'dbecc2c2-6184-4692-a0f7-693adeae0b81', // Frolic Fetizens
+  '7059747a-d1b8-479c-aff2-6a6a79c88998', // Interstellar
+]);
+const THIRTEEN_TEAM_FACTOR = 12 / 13;
+
 export default function LeaderboardsPage() {
   const { data: session } = useSession();
   const router = useRouter();
@@ -188,10 +195,15 @@ export default function LeaderboardsPage() {
             if (isRest && rr > 0) pts += 1; else if (!isRest) pts += 1;
             if (rr > 0) { rrSum += rr; rrCnt += 1; }
           });
+          // Apply proportional factor for 13-player teams (display only)
+          let displayPts = pts;
+          if (THIRTEEN_PLAYER_TEAMS.has(tid)) {
+            displayPts = Math.round(pts * THIRTEEN_TEAM_FACTOR * 100) / 100;
+          }
           const avgRR = rrCnt > 0 ? Math.round((rrSum / rrCnt) * 100) / 100 : 0;
-          res.push({ teamId: tid, teamName: String(team.name), points: pts, avgRR });
+          res.push({ teamId: tid, teamName: String(team.name), points: displayPts, avgRR });
         }
-        // sort
+        // sort by adjusted points
         res.sort((a,b)=> (b.points - a.points) || (b.avgRR - a.avgRR));
         return res;
       };
@@ -307,7 +319,7 @@ export default function LeaderboardsPage() {
                             <span className="font-medium text-rfl-navy text-sm whitespace-nowrap min-w-max">{t.teamName}</span>
                           </div>
                         </td>
-                        <td className="py-2 pr-2 text-right [font-variant-numeric:tabular-nums] font-bold text-rfl-coral text-sm w-16">{t.points}</td>
+                        <td className="py-2 pr-2 text-right [font-variant-numeric:tabular-nums] font-bold text-rfl-coral text-sm w-16">{Number.isInteger(t.points) ? t.points : t.points.toFixed(2)}</td>
                         <td className="py-2 pr-2 text-right [font-variant-numeric:tabular-nums] font-semibold text-rfl-navy text-sm w-16">{t.avgRR.toFixed(2)}</td>
                       </tr>
                     );

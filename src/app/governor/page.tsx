@@ -10,6 +10,13 @@ type IndividualRow = { user_id: string; first_name?: string; last_name?: string;
 type Team = { id: string; name: string }
 type Account = { id: string; first_name: string | null; last_name: string | null; username: string | null; team_id: string | null }
 
+// Display-only proportional adjustment for 13-player teams
+const THIRTEEN_PLAYER_TEAMS = new Set<string>([
+  'dbecc2c2-6184-4692-a0f7-693adeae0b81', // Frolic Fetizens
+  '7059747a-d1b8-479c-aff2-6a6a79c88998', // Interstellar
+]);
+const THIRTEEN_TEAM_FACTOR = 12 / 13;
+
 // Local-date helpers (device-local semantics)
 function ymdLocal(d: Date) {
   const y = d.getFullYear();
@@ -124,7 +131,11 @@ export default function GovernorPage() {
         const teamRows: TeamRow[] = teamList.map(t => {
           const agg = teamAgg.get(String(t.id)) || { points: 0, rrSum: 0, rrCnt: 0 };
           const avg = agg.rrCnt > 0 ? Math.round((agg.rrSum / agg.rrCnt) * 100) / 100 : 0;
-          return { team_id: String(t.id), team_name: String(t.name), points: agg.points, avg_rr: avg } as TeamRow;
+          let pts = agg.points;
+          if (THIRTEEN_PLAYER_TEAMS.has(String(t.id))) {
+            pts = Math.round(pts * THIRTEEN_TEAM_FACTOR * 100) / 100;
+          }
+          return { team_id: String(t.id), team_name: String(t.name), points: pts, avg_rr: avg } as TeamRow;
         });
         setTeamLeaderboard(teamRows);
 
