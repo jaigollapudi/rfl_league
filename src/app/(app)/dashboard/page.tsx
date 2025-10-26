@@ -203,7 +203,8 @@ export default function DashboardPage() {
   // Governors should not see the player dashboard; redirect to governor view
   useEffect(() => {
     if (role === 'governor') {
-      router.replace('/governor');
+      // Hard redirect to ensure cookie propagation on prod
+      if (typeof window !== 'undefined') window.location.replace('/governor');
     }
   }, [role, router]);
   // Compute on client after mount to avoid SSR timezone discrepancies
