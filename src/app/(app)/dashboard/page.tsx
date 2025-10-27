@@ -521,22 +521,29 @@ export default function DashboardPage() {
       if (!ok) return;
     }
 
-    // Pre-submit verification warning for high RR (>= 2)
+    // Pre-submit verification warning (only for duration-based threshold, > 1.6x baseline)
+    // Applies to: run, gym, yoga, cycling, swimming, badminton_pickleball, basketball_cricket
+    // No warning for: steps, golf, meditation
     try {
-      const predictedRR = calculateRR({
-        type: 'workout',
-        workout_type: activity as any,
-        duration: duration === "" ? undefined : Number(duration),
-        distance: distance === "" ? undefined : Number(distance),
-        steps: steps === "" ? undefined : Number(steps),
-        holes: holes === "" ? undefined : Number(holes),
-        age: sessionAge,
-      } as any);
-      if (predictedRR >= 2) {
-        const ok = window.confirm(
-          "Your workout looks long and has been selected for verification. Only active minutes count — any mismatch may reduce RR or lose points. Screenshot showing avg heart rate and calories is preferred"
-        );
-        if (!ok) return;
+      const warnTypes = new Set([
+        'run',
+        'gym',
+        'yoga',
+        'cycling',
+        'swimming',
+        'badminton_pickleball',
+        'basketball_cricket',
+      ]);
+      const hasDuration = duration !== "" && duration !== null && !Number.isNaN(Number(duration));
+      if (warnTypes.has(activity) && hasDuration) {
+        const baseDuration = typeof sessionAge === 'number' && sessionAge >= 65 ? 30 : 45; // mins
+        const rrBasedOnDuration = Number(duration) / baseDuration;
+        if (rrBasedOnDuration > 1.6) {
+          const ok = window.confirm(
+            "Your workout looks long and has been selected for verification. Only active minutes count — any mismatch may reduce RR or lose points. Screenshot showing avg heart rate and calories is preferred"
+          );
+          if (!ok) return;
+        }
       }
     } catch {}
 
