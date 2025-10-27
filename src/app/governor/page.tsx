@@ -225,7 +225,13 @@ export default function GovernorPage() {
       by[key].distance += Number(e.distance ?? 0);
       by[key].steps += Number(e.steps ?? 0);
     }
-    return Object.entries(by).map(([workout_type, v]) => ({ workout_type, ...v })).sort((a,b)=> b.entries - a.entries);
+    return Object.entries(by).map(([workout_type, v]) => ({ 
+      workout_type, 
+      entries: v.entries, 
+      duration: Math.round(v.duration * 100) / 100, 
+      distance: Math.round(v.distance * 100) / 100, 
+      steps: Math.round(v.steps * 100) / 100 
+    })).sort((a,b)=> b.entries - a.entries);
   }, [entriesForAggregates]);
 
   // Sorted individual leaderboard and pagination (as of yesterday)

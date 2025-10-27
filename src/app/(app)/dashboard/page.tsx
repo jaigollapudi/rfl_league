@@ -677,12 +677,12 @@ export default function DashboardPage() {
               <div className="rounded-lg border bg-white p-3 sm:p-4">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-sm font-semibold text-rfl-navy">Avg RR — You vs Team</div>
-                  <div className="text-xs text-gray-600">Scale: 1.00 → 2.50</div>
+                  <div className="text-xs text-gray-600">Scale: 1.00 → 2.00</div>
                 </div>
                 {(() => {
                   const you = typeof myAvgRR === 'number' ? myAvgRR : 1.0;
                   const team = typeof teamAvgRR === 'number' ? teamAvgRR : 1.0;
-                  const min = 1.0, max = 2.5, span = max - min;
+                  const min = 1.0, max = 2.0, span = max - min;
                   const pct = (v: number) => Math.max(0, Math.min(100, ((v - min) / span) * 100));
                   const youPct = pct(you);
                   const teamPct = pct(team);
