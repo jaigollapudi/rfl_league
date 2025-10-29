@@ -97,10 +97,9 @@ type ActivityConfig = {
 const ACTIVITY_CONFIGS: Record<string, ActivityConfig> = {
   run: {
     name: "Brisk Walk/Jog/Run",
-    fields: ['duration', 'distance'],
-    rules: ["4 kms OR 45 mins minimum"],
+    fields: ['distance'],
+    rules: ["Distance only — min 4 km (<65) / 2.6 km (65+). One continuous stretch."],
     minDistance: 4,
-    minDuration: 45,
   },
   gym: {
     name: "Weightlifting / Gym Workout",
@@ -224,6 +223,16 @@ export default function DashboardPage() {
       const minSteps = isSeniorEffective ? 5000 : (config.minSteps || 0);
       if (!steps || Number(steps) < minSteps) {
         return { valid: false, error: `Minimum ${minSteps.toLocaleString()} steps required` };
+      }
+      return { valid: true, error: "" };
+    }
+
+    if (activity === "run") {
+      const distanceProvided = distance !== "" && distance !== null && Number(distance) > 0;
+      const minDist = isSeniorEffective ? 2.6 : 4;
+      const distanceValid = distanceProvided && Number(distance) >= minDist;
+      if (!distanceValid) {
+        return { valid: false, error: `Minimum ${minDist} kms required for Brisk Walk/Jog/Run` };
       }
       return { valid: true, error: "" };
     }
@@ -431,7 +440,7 @@ export default function DashboardPage() {
         if (effectiveTeamId) setTeamId(effectiveTeamId);
       }
       if (!effectiveTeamId) return;
-      
+
       const seasonStart = seasonFixedStart();
       const today = new Date();
       const seasonStartStr = SEASON_START_LOCAL_STR;
@@ -526,7 +535,6 @@ export default function DashboardPage() {
     // No warning for: steps, golf, meditation
     try {
       const warnTypes = new Set([
-        'run',
         'gym',
         'yoga',
         'cycling',
@@ -542,8 +550,8 @@ export default function DashboardPage() {
           const ok = window.confirm(
             "Your workout looks long and has been selected for verification. Only active minutes count — any mismatch may reduce RR or lose points. Screenshot showing avg heart rate and calories is preferred"
           );
-          if (!ok) return;
-        }
+      if (!ok) return;
+    }
       }
     } catch {}
 
@@ -568,7 +576,7 @@ export default function DashboardPage() {
         p_date: date,
         p_workout_type: activity,
         p_team_id: null,
-        p_duration: duration === "" ? null : Number(duration),
+        p_duration: activity === 'run' ? null : (duration === "" ? null : Number(duration)),
         p_distance: distance === "" ? null : Number(distance),
         p_steps: steps === "" ? null : Number(steps),
         p_holes: holes === "" ? null : Number(holes),
@@ -654,8 +662,8 @@ export default function DashboardPage() {
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Avg RR</div>
                   <div className="text-lg font-bold text-rfl-navy">{myAvgRR !== null ? Number(myAvgRR).toFixed(2) : '—'}</div>
-                </div>
               </div>
+                  </div>
 
               {/* Row 2: Rest Days Used, Rest Days Unused, Missed Days */}
               <div className="grid grid-cols-3 gap-3 text-center mb-4">
@@ -666,12 +674,12 @@ export default function DashboardPage() {
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Rest Days Unused</div>
                   <div className="text-lg font-bold text-rfl-navy">{Math.max(0, 18 - myRestUsed)}</div>
-                  </div>
+                </div>
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Days Missed</div>
                   <div className="text-lg font-bold text-rfl-navy">{myMissedDays}</div>
-                </div>
               </div>
+            </div>
 
               {/* Row 3: Avg RR — You vs Team */}
               <div className="rounded-lg border bg-white p-3 sm:p-4">
@@ -726,7 +734,7 @@ export default function DashboardPage() {
                   <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Days Missed</div>
                   <div className="text-lg font-bold text-rfl-navy">{teamMissedWeek}</div>
-                </div>
+                  </div>
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Rest Days Used</div>
                   <div className="text-lg font-bold text-rfl-navy">{teamRestWeek}</div>
@@ -852,7 +860,7 @@ export default function DashboardPage() {
 
               <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-sm text-gray-700">
                 <div className="font-medium text-rfl-navy mb-1">Requirement:</div>
-                <div className="text-sm whitespace-nowrap overflow-hidden text-ellipsis">{currentConfig.rules.join(' ')}</div>
+                <div className="text-sm whitespace-nowrap overflow-hidden text-ellipsis">{activity === 'run' ? `Distance only — min ${isSeniorEffective ? '2.6' : '4'} km. Workout must be completed in one continuous stretch and reflected in the screenshot.` : currentConfig.rules.join(' ')}</div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -930,7 +938,7 @@ export default function DashboardPage() {
 
               {/* Proof upload */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{activity === 'steps' ? 'Upload Proof - Pic or Screenshot showing 1) Date 2) Steps' : 'Upload Proof - Pic or Screenshot showing 1) Date 2) Activity 3) Duration'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{activity === 'steps' ? 'Upload Proof - Pic or Screenshot showing 1) Date 2) Steps' : (activity === 'run' ? 'Upload Proof - Pic or Screenshot showing 1) Date 2) Activity 3) Distance' : 'Upload Proof - Pic or Screenshot showing 1) Date 2) Activity 3) Duration')}</label>
                 <input
                   type="file"
                   accept="image/*"
