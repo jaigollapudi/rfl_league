@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Navbar } from "@/components/navbar";
 import AppProviders from "@/components/providers";
+import { Analytics } from "@vercel/analytics/next";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -34,6 +35,7 @@ export default function RootLayout({
           <main className="min-h-screen bg-rfl-peach">
             {children}
           </main>
+          <Analytics />
         </AppProviders>
       </body>
     </html>
