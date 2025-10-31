@@ -281,6 +281,14 @@ export default function GovernorPage() {
     }
     return { male, female, other, unknown };
   }, [leagueAccounts]);
+  const roleCounts = useMemo(() => {
+    let players = 0, leaders = 0;
+    for (const a of leagueAccounts) {
+      if ((a.role || '').toString() === 'player') players++;
+      else if ((a.role || '').toString() === 'leader') leaders++;
+    }
+    return { players, leaders };
+  }, [leagueAccounts]);
   const ageBrackets = useMemo(() => {
     const b = {
       juniors: 0,         // ≤18
@@ -458,12 +466,12 @@ export default function GovernorPage() {
               <div className="text-base font-semibold text-rfl-navy">{genderCounts.female}</div>
             </div>
             <div className="p-3 bg-gray-50 rounded">
-              <div className="text-xs text-gray-600">Other</div>
-              <div className="text-base font-semibold text-rfl-navy">{genderCounts.other}</div>
+              <div className="text-xs text-gray-600">Players</div>
+              <div className="text-base font-semibold text-rfl-navy">{roleCounts.players}</div>
             </div>
             <div className="p-3 bg-gray-50 rounded">
-              <div className="text-xs text-gray-600">Unknown</div>
-              <div className="text-base font-semibold text-rfl-navy">{genderCounts.unknown}</div>
+              <div className="text-xs text-gray-600">Leaders</div>
+              <div className="text-base font-semibold text-rfl-navy">{roleCounts.leaders}</div>
             </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-center">
