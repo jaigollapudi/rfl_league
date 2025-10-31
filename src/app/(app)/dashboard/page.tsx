@@ -389,6 +389,7 @@ export default function DashboardPage() {
       if (!userId) return;
       const seasonStart = seasonFixedStart();
       const today = new Date();
+      const yesterdayCutoff = new Date(today.getTime() - 24 * 3600 * 1000);
       const seasonStartStr = SEASON_START_LOCAL_STR;
       const todayLocalStr = formatLocalYYYYMMDD(today);
 
@@ -409,11 +410,11 @@ export default function DashboardPage() {
       const avgRR = rrVals.length ? Math.round((rrVals.reduce((a,b)=>a+b,0)/rrVals.length)*100)/100 : null;
       const restUsed = entries.filter(e => String(e.type) === 'rest').length;
 
-      // Calculate missed days (days from season start to today with no entry)
+      // Calculate missed days (days from season start through yesterday with no entry).
       const byDate = new Set(entries.map(e => String(e.date)));
       let missed = 0;
       let cur = new Date(seasonStart);
-      while (cur.getTime() <= today.getTime()) {
+      while (cur.getTime() <= yesterdayCutoff.getTime()) {
         const ds = formatLocalYYYYMMDD(new Date(cur));
         if (!byDate.has(ds)) missed += 1;
         cur = new Date(cur.getTime() + 24 * 3600 * 1000);
@@ -443,6 +444,7 @@ export default function DashboardPage() {
 
       const seasonStart = seasonFixedStart();
       const today = new Date();
+      const yesterdayCutoff2 = new Date(today.getTime() - 24 * 3600 * 1000);
       const seasonStartStr = SEASON_START_LOCAL_STR;
       const todayLocalStr = formatLocalYYYYMMDD(today);
       
@@ -468,13 +470,13 @@ export default function DashboardPage() {
       // Team rest days (approved)
       const restUsed = entries.filter(e => String(e.type) === 'rest').length;
       
-      // Team missed days: per member per day with no entry from season start to today
+      // Team missed days: per member per day with no entry from season start through yesterday
       const memberSet = new Set(memberIds);
       const byDateUser = new Set(entries.map(e => `${String(e.date)}|${String(e.user_id)}`));
       let missed = 0;
       {
         let day = new Date(seasonStart);
-        while (day.getTime() <= today.getTime()) {
+        while (day.getTime() <= yesterdayCutoff2.getTime()) {
           const ds = formatLocalYYYYMMDD(new Date(day));
           memberSet.forEach((uid)=>{ if (!byDateUser.has(`${ds}|${uid}`)) missed += 1; });
           day = new Date(day.getTime() + 24 * 3600 * 1000);

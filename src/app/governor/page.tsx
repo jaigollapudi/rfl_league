@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { Menu } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { getSupabase } from '@/lib/supabase'
@@ -53,6 +54,11 @@ export default function GovernorPage() {
   const [restDaysByUser, setRestDaysByUser] = useState<Record<string, number>>({});
   const [missedDaysByUser, setMissedDaysByUser] = useState<Record<string, number>>({});
   const [teamMembers, setTeamMembers] = useState<Account[]>([]);
+  const [analyticsEvents, setAnalyticsEvents] = useState<Array<{ received_at: string } & Record<string, any>>>([]);
+  // Tab state for section navigation
+  type GovTab = 'teamLeaderboard' | 'activitySnapshot' | 'leagueSummary' | 'teamSummary' | 'individualLeaderboard';
+  const [tab, setTab] = useState<GovTab>('teamLeaderboard');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [ilbPage, setIlbPage] = useState<number>(1);
   const ilbPageSize = 10;
 
@@ -172,6 +178,23 @@ export default function GovernorPage() {
           } as IndividualRow;
         });
         setIndividualLeaderboard(indiv);
+
+        // ---- Web Analytics drain events (latest moment; fetch last 30 days window) ----
+        {
+          const now = new Date();
+          const startWindow = addDaysLocal(now, -7); // align with typical dashboard default (last 7 days)
+          const { data: wa } = await getSupabase()
+            .from('web_analytics_events')
+            .select('event, received_at')
+            .gte('received_at', startWindow.toISOString())
+            .lte('received_at', now.toISOString());
+
+          const events = ((wa || []) as Array<{ event: any; received_at: string }>).map((row) => {
+            const ev = typeof row.event === 'string' ? (() => { try { return JSON.parse(row.event); } catch { return {}; } })() : row.event;
+            return { received_at: row.received_at, ...ev } as { received_at: string } & Record<string, any>;
+          });
+          setAnalyticsEvents(events);
+        }
       } finally {
         setLoading(false);
       }
@@ -311,6 +334,84 @@ export default function GovernorPage() {
     return b;
   }, [leagueAccounts]);
 
+  // Analytics aggregations (latest moment)
+  const analyticsAgg = useMemo(() => {
+    const pageviews = analyticsEvents.filter(e => String(e.eventType || e.type || '') === 'pageview').length || analyticsEvents.length;
+    // Use sessionId if present, else fall back to deviceId-origin combination to approximate
+    const sessionKey = (e: any) => (e.sessionId != null ? `s:${e.sessionId}` : (e.deviceId != null ? `d:${e.deviceId}` : `o:${e.origin || ''}`));
+
+    const perSession = new Map<string, { pv: number }>();
+    for (const ev of analyticsEvents) {
+      const key = sessionKey(ev);
+      const rec = perSession.get(key) || { pv: 0 };
+      rec.pv += 1;
+      perSession.set(key, rec);
+    }
+    const visitors = perSession.size;
+    let singlePageSessions = 0;
+    perSession.forEach(v => { if (v.pv === 1) singlePageSessions++; });
+    const bounceRate = visitors > 0 ? Math.round((singlePageSessions / visitors) * 100) : 0;
+
+    // Pages (by unique sessions)
+    type Row = { path: string; sessions: Set<string>; };
+    const byPath = new Map<string, Row>();
+    for (const ev of analyticsEvents) {
+      const path = (ev.path || '/').toString();
+      const key = sessionKey(ev);
+      const r = byPath.get(path) || { path, sessions: new Set<string>() };
+      r.sessions.add(key);
+      byPath.set(path, r);
+    }
+    const pages = Array.from(byPath.values())
+      .map(r => ({ path: r.path, visitors: r.sessions.size }))
+      .sort((a,b)=> b.visitors - a.visitors)
+      .slice(0, 10);
+
+    // Countries (by unique sessions)
+    const byCountry = new Map<string, Set<string>>();
+    for (const ev of analyticsEvents) {
+      const ctry = (ev.country || '').toString() || 'Unknown';
+      const key = sessionKey(ev);
+      const s = byCountry.get(ctry) || new Set<string>();
+      s.add(key);
+      byCountry.set(ctry, s);
+    }
+    const countries = Array.from(byCountry.entries())
+      .map(([ctry, set]) => ({ country: ctry, visitors: set.size }))
+      .sort((a,b)=> b.visitors - a.visitors)
+      .slice(0, 6);
+
+    // Devices (by unique sessions)
+    const byDevice = new Map<string, Set<string>>();
+    for (const ev of analyticsEvents) {
+      const dev = (ev.deviceType || '').toString() || 'Unknown';
+      const key = sessionKey(ev);
+      const s = byDevice.get(dev) || new Set<string>();
+      s.add(key);
+      byDevice.set(dev, s);
+    }
+    const devices = Array.from(byDevice.entries())
+      .map(([name, set]) => ({ name, visitors: set.size }))
+      .sort((a,b)=> b.visitors - a.visitors)
+      .slice(0, 4);
+
+    // Operating Systems (by unique sessions)
+    const byOS = new Map<string, Set<string>>();
+    for (const ev of analyticsEvents) {
+      const os = (ev.osName || '').toString() || 'Unknown';
+      const key = sessionKey(ev);
+      const s = byOS.get(os) || new Set<string>();
+      s.add(key);
+      byOS.set(os, s);
+    }
+    const osList = Array.from(byOS.entries())
+      .map(([name, set]) => ({ name, visitors: set.size }))
+      .sort((a,b)=> b.visitors - a.visitors)
+      .slice(0, 6);
+
+    return { visitors, pageviews, bounceRate, pages, countries, devices, osList };
+  }, [analyticsEvents]);
+
   // Sorted individual leaderboard and pagination (as of yesterday)
   const sortedIndividuals = useMemo(() => {
     return (individualLeaderboard || [])
@@ -334,9 +435,42 @@ export default function GovernorPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 space-y-6">
-      <div className="text-sm text-gray-600">As of {asOf}</div>
+      {/* Header with tab navigation */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm text-gray-600">As of {asOf}</div>
+        {/* Desktop tabs */}
+        <div className="hidden md:flex items-center gap-2">
+          <button className={`px-3 py-1.5 rounded text-sm ${tab==='teamLeaderboard'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>setTab('teamLeaderboard')}>Team Leaderboard</button>
+          <button className={`px-3 py-1.5 rounded text-sm ${tab==='activitySnapshot'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>setTab('activitySnapshot')}>League Activity Snapshot</button>
+          <button className={`px-3 py-1.5 rounded text-sm ${tab==='leagueSummary'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>setTab('leagueSummary')}>League Summary</button>
+          <button className={`px-3 py-1.5 rounded text-sm ${tab==='teamSummary'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>setTab('teamSummary')}>Team Summary</button>
+          <button className={`px-3 py-1.5 rounded text-sm ${tab==='individualLeaderboard'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>setTab('individualLeaderboard')}>Individual Leaderboard</button>
+        </div>
+        {/* Mobile hamburger */}
+        <div className="md:hidden relative">
+          <button aria-label="Open menu" className="p-2 rounded border" onClick={()=>setMobileMenuOpen(v=>!v)}>
+            <Menu className="w-5 h-5" />
+          </button>
+          {mobileMenuOpen && (
+            <div className="absolute right-0 mt-2 w-56 bg-white border rounded shadow z-10">
+              {[
+                {k:'teamLeaderboard', label:'Team Leaderboard'},
+                {k:'activitySnapshot', label:'League Activity Snapshot'},
+                {k:'leagueSummary', label:'League Summary'},
+                {k:'teamSummary', label:'Team Summary'},
+                {k:'individualLeaderboard', label:'Individual Leaderboard'},
+              ].map((it)=> (
+                <button key={String(it.k)} className={`block w-full text-left px-3 py-2 text-sm ${tab===it.k as GovTab ? 'bg-gray-100 text-rfl-navy':'text-gray-800'}`} onClick={()=>{ setTab(it.k as GovTab); setMobileMenuOpen(false); }}>
+                  {it.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Card 1: Team leaderboard */}
+      {tab === 'teamLeaderboard' && (
       <div className="bg-white rounded-lg shadow p-4">
         <h2 className="text-base font-semibold mb-3">Team Leaderboard</h2>
         <div className="overflow-x-auto">
@@ -368,8 +502,10 @@ export default function GovernorPage() {
           </table>
         </div>
       </div>
+      )}
 
       {/* Card 2: Aggregate activity snapshot (moved up under leaderboard) */}
+      {tab === 'activitySnapshot' && (
       <div className="bg-white rounded-lg shadow p-4">
         <h2 className="text-base font-semibold mb-3">League Activity Snapshot (Aggregate)</h2>
         <div className="overflow-x-auto pb-2">
@@ -407,8 +543,10 @@ export default function GovernorPage() {
         </div>
         <div className="mt-2 text-xs text-gray-500">Season-to-date through {asOf}</div>
       </div>
+      )}
 
       {/* League summary block: avg RR, total rests, composition */}
+      {tab === 'leagueSummary' && (
       <div className="bg-white rounded-lg shadow p-4">
         <h2 className="text-base font-semibold mb-3">League Summary</h2>
         {/* Avg RR — League */}
@@ -502,8 +640,12 @@ export default function GovernorPage() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* Web Analytics section intentionally not rendered */}
 
       {/* Card 3: Team drilldown */}
+      {tab === 'teamSummary' && (
       <div className="bg-white rounded-lg shadow p-4">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-base font-semibold">Team Summary (Players)</h2>
@@ -546,8 +688,10 @@ export default function GovernorPage() {
           </table>
         </div>
       </div>
+      )}
 
       {/* Card 4: Individual leaderboard (league-wide) with pagination */}
+      {tab === 'individualLeaderboard' && (
       <div className="bg-white rounded-lg shadow p-4">
         <h2 className="text-base font-semibold mb-3">Individual Leaderboard</h2>
         <div className="overflow-x-auto">
@@ -603,6 +747,7 @@ export default function GovernorPage() {
           </div>
         </div>
       </div>
+      )}
     </div>
   )
 }
