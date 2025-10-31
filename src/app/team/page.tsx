@@ -196,16 +196,20 @@ export default function TeamPage() {
     let endDateCalc: Date;
     
     if (timePeriod === "overall") {
-      // Overall: from fixed season start to today
+      // Overall: from fixed season start through yesterday (do not count today)
       cur = firstWeekStart(0);
-      endDateCalc = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+      const todayUtc = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+      endDateCalc = new Date(todayUtc.getTime() - 24 * 3600 * 1000);
     } else {
       // Weekly: from week start to week end (or today if current week)
       const seasonStart = firstWeekStart(0);
       const weekNum = parseInt(timePeriod.split('-')[1]);
       cur = addDaysUTC(seasonStart, (weekNum - 1) * 7);
       const weekEnd = addDaysUTC(cur, 6);
-      endDateCalc = new Date(Math.min(weekEnd.getTime(), new Date().getTime()));
+      const todayUtc = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+      const yesterdayUtc = new Date(todayUtc.getTime() - 24 * 3600 * 1000);
+      // If current week is ongoing, stop at yesterday; otherwise use week end
+      endDateCalc = weekEnd.getTime() >= todayUtc.getTime() ? yesterdayUtc : weekEnd;
     }
     
     while (cur.getTime() <= endDateCalc.getTime()) {
@@ -324,16 +328,19 @@ export default function TeamPage() {
       let endDate: Date;
       
       if (timePeriod === "overall") {
-        // Overall: from fixed season start to today
+        // Overall: from fixed season start through yesterday (do not count today)
         cur = firstWeekStart(0);
-        endDate = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+        const todayUtc = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+        endDate = new Date(todayUtc.getTime() - 24 * 3600 * 1000);
       } else {
         // Weekly: from week start to week end (or today if current week)
         const seasonStart = firstWeekStart(0);
         const weekNum = parseInt(timePeriod.split('-')[1]);
         cur = addDaysUTC(seasonStart, (weekNum - 1) * 7);
         const weekEnd = addDaysUTC(cur, 6);
-        endDate = new Date(Math.min(weekEnd.getTime(), new Date().getTime()));
+        const todayUtc = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+        const yesterdayUtc = new Date(todayUtc.getTime() - 24 * 3600 * 1000);
+        endDate = weekEnd.getTime() >= todayUtc.getTime() ? yesterdayUtc : weekEnd;
       }
       
       const set = datesByUser.get(uid) || new Set<string>();
