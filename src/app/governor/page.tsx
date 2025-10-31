@@ -256,14 +256,17 @@ export default function GovernorPage() {
 
   // League-wide avg RR (as of yesterday)
   const leagueAvgRR = useMemo(() => {
+    // Only count workout entries belonging to players/leaders (exclude governor, etc.)
+    const eligible = new Set((leagueAccounts || []).map(a => String(a.id)));
     let sum = 0; let cnt = 0;
     for (const e of entriesForAggregates) {
+      if (!eligible.has(String(e.user_id))) continue;
       if (String(e.type) === 'rest') continue;
       const rr = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
       if (rr > 0) { sum += rr; cnt += 1; }
     }
     return cnt > 0 ? Math.round((sum / cnt) * 100) / 100 : 0;
-  }, [entriesForAggregates]);
+  }, [entriesForAggregates, leagueAccounts]);
 
   const restDaysTotal = useMemo(() => entriesForAggregates.filter((e:any) => String(e.type) === 'rest').length, [entriesForAggregates]);
 
