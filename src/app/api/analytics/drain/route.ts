@@ -18,14 +18,27 @@ function getSupabaseAdmin() {
 async function verifySignature(req: NextRequest, rawBody: string): Promise<boolean> {
   const secret = process.env.VERCEL_ANALYTICS_DRAIN_SECRET;
   if (!secret) return true; // allow if not configured
-  const provided = req.headers.get('x-vercel-signature') || '';
+  const provided = (req.headers.get('x-vercel-signature') || '').trim();
   if (!provided) return false;
-  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
-  try {
-    return crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
-  } catch {
-    return false;
+
+  const candidates: string[] = [];
+  // HMAC-SHA256
+  candidates.push(crypto.createHmac('sha256', secret).update(rawBody).digest('hex'));
+  candidates.push(crypto.createHmac('sha256', secret).update(rawBody).digest('base64'));
+  // HMAC-SHA1 (fallback just in case)
+  candidates.push(crypto.createHmac('sha1', secret).update(rawBody).digest('hex'));
+  candidates.push(crypto.createHmac('sha1', secret).update(rawBody).digest('base64'));
+
+  for (const exp of candidates) {
+    try {
+      if (exp.length === provided.length && crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(exp))) {
+        return true;
+      }
+    } catch {
+      // continue
+    }
   }
+  return false;
 }
 
 export async function POST(req: NextRequest) {
