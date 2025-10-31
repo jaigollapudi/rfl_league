@@ -59,6 +59,18 @@ export default function GovernorPage() {
   type GovTab = 'teamLeaderboard' | 'activitySnapshot' | 'leagueSummary' | 'teamSummary' | 'individualLeaderboard';
   const [tab, setTab] = useState<GovTab>('teamLeaderboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  // Sync tab from hash so Navbar mobile links can target sections
+  useEffect(() => {
+    const applyFromHash = () => {
+      if (typeof window === 'undefined') return;
+      const h = window.location.hash.replace('#','');
+      const allowed = new Set(['teamLeaderboard','activitySnapshot','leagueSummary','teamSummary','individualLeaderboard']);
+      if (allowed.has(h)) setTab(h as GovTab);
+    };
+    applyFromHash();
+    window.addEventListener('hashchange', applyFromHash);
+    return () => window.removeEventListener('hashchange', applyFromHash);
+  }, []);
   const [ilbPage, setIlbPage] = useState<number>(1);
   const ilbPageSize = 10;
 
@@ -440,13 +452,13 @@ export default function GovernorPage() {
         <div className="text-sm text-gray-600">As of {asOf}</div>
         {/* Desktop tabs */}
         <div className="hidden md:flex items-center gap-2">
-          <button className={`px-3 py-1.5 rounded text-sm ${tab==='teamLeaderboard'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>setTab('teamLeaderboard')}>Team Leaderboard</button>
-          <button className={`px-3 py-1.5 rounded text-sm ${tab==='activitySnapshot'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>setTab('activitySnapshot')}>League Activity Snapshot</button>
-          <button className={`px-3 py-1.5 rounded text-sm ${tab==='leagueSummary'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>setTab('leagueSummary')}>League Summary</button>
-          <button className={`px-3 py-1.5 rounded text-sm ${tab==='teamSummary'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>setTab('teamSummary')}>Team Summary</button>
-          <button className={`px-3 py-1.5 rounded text-sm ${tab==='individualLeaderboard'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>setTab('individualLeaderboard')}>Individual Leaderboard</button>
+          <button className={`px-3 py-1.5 rounded text-sm ${tab==='teamLeaderboard'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>{ setTab('teamLeaderboard'); if (typeof window!=='undefined') window.location.hash='teamLeaderboard'; }}>Team Leaderboard</button>
+          <button className={`px-3 py-1.5 rounded text-sm ${tab==='activitySnapshot'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>{ setTab('activitySnapshot'); if (typeof window!=='undefined') window.location.hash='activitySnapshot'; }}>League Activity Snapshot</button>
+          <button className={`px-3 py-1.5 rounded text-sm ${tab==='leagueSummary'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>{ setTab('leagueSummary'); if (typeof window!=='undefined') window.location.hash='leagueSummary'; }}>League Summary</button>
+          <button className={`px-3 py-1.5 rounded text-sm ${tab==='teamSummary'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>{ setTab('teamSummary'); if (typeof window!=='undefined') window.location.hash='teamSummary'; }}>Team Summary</button>
+          <button className={`px-3 py-1.5 rounded text-sm ${tab==='individualLeaderboard'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>{ setTab('individualLeaderboard'); if (typeof window!=='undefined') window.location.hash='individualLeaderboard'; }}>Individual Leaderboard</button>
         </div>
-        {/* Mobile hamburger */}
+        {/* Mobile hamburger for tab navigation */}
         <div className="md:hidden relative">
           <button aria-label="Open menu" className="p-2 rounded border" onClick={()=>setMobileMenuOpen(v=>!v)}>
             <Menu className="w-5 h-5" />
