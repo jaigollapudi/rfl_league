@@ -195,15 +195,16 @@ export default function LeaderboardsPage() {
             if (isRest && rr > 0) pts += 1; else if (!isRest) pts += 1;
             if (rr > 0) { rrSum += rr; rrCnt += 1; }
           });
-          // Apply proportional factor for 13-player teams (display only)
-          let displayPts = pts;
+          // Apply proportional factor for 13-player teams, then ROUND to nearest integer
+          let adjusted = pts;
           if (THIRTEEN_PLAYER_TEAMS.has(tid)) {
-            displayPts = Math.round(pts * THIRTEEN_TEAM_FACTOR * 100) / 100;
+            adjusted = pts * THIRTEEN_TEAM_FACTOR;
           }
+          const pointsRounded = Math.round(adjusted);
           const avgRR = rrCnt > 0 ? Math.round((rrSum / rrCnt) * 100) / 100 : 0;
-          res.push({ teamId: tid, teamName: String(team.name), points: displayPts, avgRR });
+          res.push({ teamId: tid, teamName: String(team.name), points: pointsRounded, avgRR });
         }
-        // sort by adjusted points
+        // sort by rounded (displayed) points, then RR
         res.sort((a,b)=> (b.points - a.points) || (b.avgRR - a.avgRR));
         return res;
       };
@@ -319,7 +320,7 @@ export default function LeaderboardsPage() {
                             <span className="font-medium text-rfl-navy text-sm whitespace-nowrap min-w-max">{t.teamName}</span>
                           </div>
                         </td>
-                        <td className="py-2 pr-2 text-right [font-variant-numeric:tabular-nums] font-bold text-rfl-coral text-sm w-16">{Math.round(t.points)}</td>
+                        <td className="py-2 pr-2 text-right [font-variant-numeric:tabular-nums] font-bold text-rfl-coral text-sm w-16">{t.points}</td>
                         <td className="py-2 pr-2 text-right [font-variant-numeric:tabular-nums] font-semibold text-rfl-navy text-sm w-16">{t.avgRR.toFixed(2)}</td>
                       </tr>
                     );
