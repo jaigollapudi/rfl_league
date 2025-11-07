@@ -152,11 +152,12 @@ export default function GovernorPage() {
         const teamRows: TeamRow[] = teamList.map(t => {
           const agg = teamAgg.get(String(t.id)) || { points: 0, rrSum: 0, rrCnt: 0 };
           const avg = agg.rrCnt > 0 ? Math.round((agg.rrSum / agg.rrCnt) * 100) / 100 : 0;
-          let pts = agg.points;
+          let adjusted = agg.points;
           if (THIRTEEN_PLAYER_TEAMS.has(String(t.id))) {
-            pts = Math.round(pts * THIRTEEN_TEAM_FACTOR * 100) / 100;
+            adjusted = agg.points * THIRTEEN_TEAM_FACTOR;
           }
-          return { team_id: String(t.id), team_name: String(t.name), points: pts, avg_rr: avg } as TeamRow;
+          const pointsRounded = Math.round(adjusted);
+          return { team_id: String(t.id), team_name: String(t.name), points: pointsRounded, avg_rr: avg } as TeamRow;
         });
         setTeamLeaderboard(teamRows);
 
