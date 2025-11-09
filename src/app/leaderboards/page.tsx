@@ -175,6 +175,17 @@ export default function LeaderboardsPage() {
       const { data: allTeams } = await getSupabase().from('teams').select('id, name');
       const teams = (allTeams || []) as Array<{ id: string; name: string }>;
 
+      // Fetch total Special Challenge bonus points per team (sum of scores)
+      const { data: chScores } = await getSupabase()
+        .from('special_challenge_team_scores')
+        .select('team_id, score');
+      const challengeBonusByTeam = new Map<string, number>();
+      (chScores || []).forEach((r: any) => {
+        const tid = String(r.team_id);
+        const s = r.score == null ? 0 : Number(r.score);
+        challengeBonusByTeam.set(tid, (challengeBonusByTeam.get(tid) || 0) + (Number.isFinite(s) ? s : 0));
+      });
+
       // Helper to compute standings within [s, e]
       const compute = async (s: Date, e: Date): Promise<Array<Omit<TeamStanding, 'position' | 'delta'>>> => {
         const res: Array<Omit<TeamStanding, 'position' | 'delta'>> = [];
@@ -201,8 +212,11 @@ export default function LeaderboardsPage() {
             adjusted = pts * THIRTEEN_TEAM_FACTOR;
           }
           const pointsRounded = Math.round(adjusted);
+          // Add Special Challenge bonus AFTER proportional rounding (display-only rule)
+          const bonus = Number(challengeBonusByTeam.get(tid) || 0);
+          const finalPoints = pointsRounded + (Number.isFinite(bonus) ? bonus : 0);
           const avgRR = rrCnt > 0 ? Math.round((rrSum / rrCnt) * 100) / 100 : 0;
-          res.push({ teamId: tid, teamName: String(team.name), points: pointsRounded, avgRR });
+          res.push({ teamId: tid, teamName: String(team.name), points: finalPoints, avgRR });
         }
         // sort by rounded (displayed) points, then RR
         res.sort((a,b)=> (b.points - a.points) || (b.avgRR - a.avgRR));
