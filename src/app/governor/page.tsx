@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import React from 'react'
 import { Menu, Plus, Pencil, Trash2, Save, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
@@ -762,10 +763,74 @@ export default function GovernorPage() {
           </div>
         </div>
 
-        {/* Special Challenges Leaderboard */}
+        {/* Special Challenges Leaderboard (Matrix view like Teams table) */}
+        <div className="bg-white rounded-lg shadow p-4">
+          <h2 className="text-base font-semibold mb-3">Special Challenges Leaderboard</h2>
+          {/* Matrix table: challenges as columns, teams as rows */}
+          <div className="overflow-x-auto pb-2">
+            <div
+              className="text-sm inline-grid gap-x-10"
+              style={{ gridTemplateColumns: `auto repeat(${Math.max(challenges.length, 1)}, minmax(100px, max-content))` }}
+            >
+              <div className="px-2 py-2 border-b">
+                <div className="text-sm font-semibold text-gray-700">Challenge</div>
+                <div className="text-xs text-gray-500 mt-1">Team</div>
+              </div>
+              {challenges.map((ch) => (
+                <div key={`h-${ch.id}`} className="pl-4 pr-3 py-2 border-b whitespace-nowrap">
+                  <button
+                    className="text-blue-600 underline hover:text-blue-700 text-sm font-medium"
+                    onClick={() => { if (ch.doc_url) setViewerUrl(ch.doc_url); }}
+                  >
+                    {ch.name}
+                  </button>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {formatRangeNoYear(ch.start_date, ch.end_date)}
+                  </div>
+                </div>
+              ))}
+
+              {teams.map((t, idx) => {
+                const logoName = String(t.name).replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'') + '_Logo.jpeg';
+                const logoPath = `/img/${logoName}`;
+                const isLast = idx >= teams.length - 1;
+                return (
+                  <React.Fragment key={t.id}>
+                    <div className={`px-2 py-3 ${!isLast ? 'border-b' : ''}`}>
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={logoPath}
+                          alt={`${t.name} logo`}
+                          className="w-6 h-6 rounded border border-gray-200 object-cover flex-shrink-0"
+                          onError={(e)=> { (e.target as HTMLImageElement).src = '/img/placeholder-team.svg'; }}
+                        />
+                        <span className="font-medium text-rfl-navy whitespace-nowrap">{t.name}</span>
+                      </div>
+                    </div>
+                    {challenges.map((ch) => (
+                      <div
+                        key={`${t.id}-${ch.id}`}
+                        className={`pl-4 pr-3 py-3 text-right [font-variant-numeric:tabular-nums] ${!isLast ? 'border-b' : ''}`}
+                      >
+                        {ch.scores[String(t.id)] ?? ''}
+                      </div>
+                    ))}
+                  </React.Fragment>
+                );
+              })}
+              {!teams.length && (
+                <div className="py-8 text-center text-gray-500" style={{ gridColumn: `span ${Math.max(challenges.length, 1) + 1}` }}>
+                  No data yet.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Advanced: Manage Challenges (CRUD) */}
         <div className="bg-white rounded-lg shadow p-4">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-base font-semibold">Special Challenges Leaderboard</h2>
+            <h2 className="text-base font-semibold">Manage Challenges</h2>
             <button
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-sm bg-rfl-navy text-white hover:opacity-90"
               onClick={openCreate}

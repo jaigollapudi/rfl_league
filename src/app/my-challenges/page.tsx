@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { getSupabase } from '@/lib/supabase'
+import { useSession } from 'next-auth/react'
+import { useRouter } from 'next/navigation'
+import React from 'react'
 
 type Team = { id: string; name: string }
 type Challenge = {
@@ -15,12 +18,30 @@ type Challenge = {
 }
 
 export default function MyChallengesPage() {
+  const { data: session, status } = useSession()
+  const router = useRouter()
+  const [authReady, setAuthReady] = useState(false)
   const [loading, setLoading] = useState(true)
   const [teams, setTeams] = useState<Team[]>([])
   const [challenges, setChallenges] = useState<Challenge[]>([])
   const [viewerUrl, setViewerUrl] = useState<string | null>(null)
 
   useEffect(() => {
+    if (status === 'loading') return
+    if (!session) {
+      router.replace('/signin')
+      return
+    }
+    const role = (session.user as any)?.role
+    if (role === 'governor') {
+      router.replace('/governor')
+      return
+    }
+    setAuthReady(true)
+  }, [status, session, router])
+
+  useEffect(() => {
+    if (!authReady) return
     const load = async () => {
       setLoading(true)
       try {
@@ -66,7 +87,7 @@ export default function MyChallengesPage() {
       }
     }
     load()
-  }, [])
+  }, [authReady])
 
   function formatRangeNoYear(startStr: string, endStr: string) {
     if (!startStr && !endStr) return '—'
@@ -89,7 +110,7 @@ export default function MyChallengesPage() {
     return '—'
   }
 
-  if (loading) {
+  if (status === 'loading' || !authReady || loading) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-6">
         <p className="text-sm text-gray-600">Loading challenges…</p>
@@ -101,54 +122,62 @@ export default function MyChallengesPage() {
     <div className="mx-auto max-w-7xl px-4 py-6 space-y-4">
       <h1 className="text-xl font-semibold text-rfl-navy">My Challenges</h1>
       <div className="bg-white rounded-lg shadow p-4">
+        {/* Matrix: challenges as columns, teams as rows */}
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
-            <thead className="text-left text-gray-600">
-              <tr>
-                <th className="py-2 pr-2 w-64">Challenge</th>
-                <th className="py-2 pr-2 w-40">Date Range</th>
-                {teams.map((t) => (
-                  <th key={String(t.id)} className="py-2 px-2 text-right whitespace-nowrap">
-                    {t.name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {challenges.map((ch) => (
-                <tr key={ch.id} className="border-t align-top">
-                  <td className="py-2 pr-2">
-                    <button
-                      className="font-medium text-blue-600 underline hover:text-blue-700"
-                      onClick={()=>{
-                        if (!ch.doc_url) return
-                        setViewerUrl(ch.doc_url)
-                      }}
+          <div
+            className="text-sm inline-grid gap-x-10"
+            style={{ gridTemplateColumns: `auto repeat(${Math.max(challenges.length, 1)}, minmax(100px, max-content))` }}
+          >
+            <div className="px-2 py-2 border-b">
+              <div className="text-sm font-semibold text-gray-700">Challenge</div>
+              <div className="text-xs text-gray-500 mt-1">Team</div>
+            </div>
+            {challenges.map((ch) => (
+              <div key={`h-${ch.id}`} className="pl-4 pr-3 py-2 border-b whitespace-nowrap">
+                <button
+                  className="text-blue-600 underline hover:text-blue-700 text-sm font-medium"
+                  onClick={()=> { if (ch.doc_url) setViewerUrl(ch.doc_url) }}
+                >
+                  {ch.name}
+                </button>
+                <div className="text-xs text-gray-500 mt-1">{formatRangeNoYear(ch.start_date, ch.end_date)}</div>
+              </div>
+            ))}
+
+            {teams.map((t, idx) => {
+              const logoName = String(t.name).replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'') + '_Logo.jpeg'
+              const logoPath = `/img/${logoName}`
+              const isLast = idx >= teams.length - 1
+              return (
+                <React.Fragment key={t.id}>
+                  <div className={`px-2 py-3 ${!isLast ? 'border-b' : ''}`}>
+                    <div className="flex items-center gap-2">
+                      <img
+                        src={logoPath}
+                        alt={`${t.name} logo`}
+                        className="w-6 h-6 rounded border border-gray-200 object-cover flex-shrink-0"
+                        onError={(e)=> { (e.target as HTMLImageElement).src = '/img/placeholder-team.svg' }}
+                      />
+                      <span className="font-medium text-rfl-navy whitespace-nowrap">{t.name}</span>
+                    </div>
+                  </div>
+                  {challenges.map((ch) => (
+                    <div
+                      key={`${t.id}-${ch.id}`}
+                      className={`pl-4 pr-3 py-3 text-right [font-variant-numeric:tabular-nums] ${!isLast ? 'border-b' : ''}`}
                     >
-                      {ch.name}
-                    </button>
-                  </td>
-                  <td className="py-2 pr-2 whitespace-nowrap">
-                    <span className="text-gray-700">{formatRangeNoYear(ch.start_date, ch.end_date)}</span>
-                  </td>
-                  {teams.map((t) => (
-                    <td key={`${ch.id}-${String(t.id)}`} className="py-2 px-2 text-right">
-                      <span className="[font-variant-numeric:tabular-nums]">
-                        {ch.scores[String(t.id)] ?? ''}
-                      </span>
-                    </td>
+                      {ch.scores[String(t.id)] ?? ''}
+                    </div>
                   ))}
-                </tr>
-              ))}
-              {!challenges.length && (
-                <tr>
-                  <td colSpan={2 + teams.length} className="py-8 text-center text-gray-500">
-                    No challenges yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                </React.Fragment>
+              )
+            })}
+            {!teams.length && (
+              <div className="py-8 text-center text-gray-500" style={{ gridColumn: `span ${Math.max(challenges.length, 1) + 1}` }}>
+                No challenges yet.
+              </div>
+            )}
+          </div>
         </div>
       </div>
       {!!viewerUrl && (
