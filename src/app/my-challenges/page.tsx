@@ -1,14 +1,14 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Info } from 'lucide-react'
+import { X } from 'lucide-react'
 import { getSupabase } from '@/lib/supabase'
 
 type Team = { id: string; name: string }
 type Challenge = {
   id: string
   name: string
-  description: string
+  doc_url: string | null
   start_date: string
   end_date: string
   scores: Record<string, number | null>
@@ -18,7 +18,7 @@ export default function MyChallengesPage() {
   const [loading, setLoading] = useState(true)
   const [teams, setTeams] = useState<Team[]>([])
   const [challenges, setChallenges] = useState<Challenge[]>([])
-  const [descOpenId, setDescOpenId] = useState<string | null>(null)
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -36,7 +36,7 @@ export default function MyChallengesPage() {
 
         const { data: chRows } = await getSupabase()
           .from('special_challenges')
-          .select('id,name,description,start_date,end_date')
+          .select('id,name,doc_url,start_date,end_date')
           .order('created_at', { ascending: false })
         const { data: scRows } = await getSupabase()
           .from('special_challenge_team_scores')
@@ -47,7 +47,7 @@ export default function MyChallengesPage() {
           byId.set(String(r.id), {
             id: String(r.id),
             name: String(r.name),
-            description: r.description || '',
+            doc_url: r.doc_url || null,
             start_date: r.start_date || '',
             end_date: r.end_date || '',
             scores: emptyScores(teamList),
@@ -67,6 +67,27 @@ export default function MyChallengesPage() {
     }
     load()
   }, [])
+
+  function formatRangeNoYear(startStr: string, endStr: string) {
+    if (!startStr && !endStr) return '—'
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    const ps = (s: string) => {
+      const [y,m,d] = s.split('-').map(v=>parseInt(v,10))
+      return new Date(y,(m||1)-1,d||1)
+    }
+    const s = startStr ? ps(startStr) : null
+    const e = endStr ? ps(endStr) : null
+    if (s && e) {
+      const sameMonth = s.getMonth() === e.getMonth()
+      const sm = months[s.getMonth()]
+      const em = months[e.getMonth()]
+      const sd = s.getDate(); const ed = e.getDate()
+      return sameMonth ? `${sm} ${sd} – ${ed}` : `${sm} ${sd} – ${em} ${ed}`
+    }
+    if (s && !e) return `${months[s.getMonth()]} ${s.getDate()}`
+    if (!s && e) return `${months[e.getMonth()]} ${e.getDate()}`
+    return '—'
+  }
 
   if (loading) {
     return (
@@ -97,26 +118,18 @@ export default function MyChallengesPage() {
               {challenges.map((ch) => (
                 <tr key={ch.id} className="border-t align-top">
                   <td className="py-2 pr-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-rfl-navy">{ch.name}</span>
-                      {ch.description ? (
-                        <button
-                          className="p-1 rounded hover:bg-gray-100"
-                          title="Show description"
-                          onClick={()=> setDescOpenId(v => v === ch.id ? null : ch.id)}
-                        >
-                          <Info className="w-4 h-4 text-gray-600" />
-                        </button>
-                      ) : null}
-                    </div>
-                    {descOpenId === ch.id && ch.description ? (
-                      <div className="mt-2 text-xs text-gray-600 whitespace-pre-wrap">{ch.description}</div>
-                    ) : null}
+                    <button
+                      className="font-medium text-blue-600 underline hover:text-blue-700"
+                      onClick={()=>{
+                        if (!ch.doc_url) return
+                        setViewerUrl(ch.doc_url)
+                      }}
+                    >
+                      {ch.name}
+                    </button>
                   </td>
                   <td className="py-2 pr-2 whitespace-nowrap">
-                    <span className="text-gray-700">
-                      {(ch.start_date || '—')} → {(ch.end_date || '—')}
-                    </span>
+                    <span className="text-gray-700">{formatRangeNoYear(ch.start_date, ch.end_date)}</span>
                   </td>
                   {teams.map((t) => (
                     <td key={`${ch.id}-${String(t.id)}`} className="py-2 px-2 text-right">
@@ -138,6 +151,14 @@ export default function MyChallengesPage() {
           </table>
         </div>
       </div>
+      {!!viewerUrl && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={()=> setViewerUrl(null)}>
+          <div className="bg-white w-[95%] h-[85%] max-w-5xl rounded shadow relative" onClick={(e)=> e.stopPropagation()}>
+            <button className="absolute top-2 right-2 p-2 rounded border hover:bg-gray-50" onClick={()=> setViewerUrl(null)} aria-label="Close"><X className="w-4 h-4" /></button>
+            <iframe src={viewerUrl || ''} className="w-full h-full rounded-b" title="Challenge document"></iframe>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

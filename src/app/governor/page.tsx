@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { Menu, Info, Plus, Pencil, Trash2, Save, X } from 'lucide-react'
+import { Menu, Plus, Pencil, Trash2, Save, X } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { getSupabase } from '@/lib/supabase'
@@ -16,7 +16,7 @@ type LeagueAccount = { id: string; role?: string | null; team_id?: string | null
 type Challenge = {
   id: string;
   name: string;
-  description: string;
+  doc_url: string | null;
   start_date: string; // YYYY-MM-DD
   end_date: string;   // YYYY-MM-DD
   scores: Record<string, number | null>; // key: team_id
@@ -88,13 +88,14 @@ export default function GovernorPage() {
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [createOpen, setCreateOpen] = useState<boolean>(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [descOpenId, setDescOpenId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ name: string; description: string; start_date: string; end_date: string }>({
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ name: string; start_date: string; end_date: string; file?: File | null }>({
     name: '',
-    description: '',
     start_date: '',
     end_date: '',
+    file: null,
   });
+  const [editFiles, setEditFiles] = useState<Record<string, File | null>>({});
 
   function generateUuid() {
     try { return crypto.randomUUID(); } catch { return `ch_${Date.now()}`; }
@@ -105,21 +106,44 @@ export default function GovernorPage() {
     return s;
   }
   function openCreate() {
-    setDraft({ name: '', description: '', start_date: '', end_date: '' });
+    setDraft({ name: '', start_date: '', end_date: '', file: null });
     setCreateOpen(true);
   }
   async function addChallenge() {
     if (!draft.name.trim()) return;
+    if (draft.file) {
+      const isPdf = (draft.file.type === 'application/pdf') || /\.pdf$/i.test(draft.file.name);
+      if (!isPdf) {
+        alert('Please upload a PDF file (.pdf).');
+        return;
+      }
+    }
+    // Pre-generate id to build storage path
+    const id = generateUuid();
+    let docUrl: string | null = null;
+    if (draft.file) {
+      const path = `${id}/${draft.file.name}`;
+      const { error: upErr } = await getSupabase()
+        .storage.from('challenge_docs')
+        .upload(path, draft.file, { upsert: true, cacheControl: '3600' });
+      if (upErr) {
+        alert(`Upload failed: ${upErr.message}`);
+        return;
+      }
+      const pub = getSupabase().storage.from('challenge_docs').getPublicUrl(path);
+      docUrl = pub.data.publicUrl;
+    }
     const payload = {
+      id,
       name: draft.name.trim(),
-      description: draft.description.trim(),
+      doc_url: docUrl,
       start_date: draft.start_date || null,
       end_date: draft.end_date || null,
     } as any;
     const { data, error } = await getSupabase()
       .from('special_challenges')
       .insert(payload)
-      .select('id,name,description,start_date,end_date')
+      .select('id,name,doc_url,start_date,end_date')
       .single();
     if (error) {
       alert(`Create failed: ${error.message}`);
@@ -128,7 +152,7 @@ export default function GovernorPage() {
     const row: Challenge = {
       id: String(data.id),
       name: String(data.name),
-      description: data.description || '',
+      doc_url: data.doc_url || null,
       start_date: data.start_date || '',
       end_date: data.end_date || '',
       scores: emptyScores(teams),
@@ -148,9 +172,29 @@ export default function GovernorPage() {
     if (!current) { setEditingId(null); return; }
 
     // Update core fields
+    // If a new file is selected for this challenge, upload and set doc_url
+    let newDocUrl: string | null | undefined = undefined;
+    const chosen = editFiles[id];
+    if (chosen) {
+      const isPdf = (chosen.type === 'application/pdf') || /\.pdf$/i.test(chosen.name);
+      if (!isPdf) {
+        alert('Please upload a PDF file (.pdf).');
+        return;
+      }
+      const path = `${id}/${chosen.name}`;
+      const { error: upErr } = await getSupabase()
+        .storage.from('challenge_docs')
+        .upload(path, chosen, { upsert: true, cacheControl: '3600' });
+      if (upErr) {
+        alert(`Upload failed: ${upErr.message}`);
+        return;
+      }
+      const pub = getSupabase().storage.from('challenge_docs').getPublicUrl(path);
+      newDocUrl = pub.data.publicUrl;
+    }
     const upd = {
       name: current.name,
-      description: current.description,
+      doc_url: newDocUrl !== undefined ? newDocUrl : current.doc_url,
       start_date: current.start_date || null,
       end_date: current.end_date || null,
     } as any;
@@ -197,7 +241,7 @@ export default function GovernorPage() {
     }
 
     // Update local state last
-    setChallenges(prev => prev.map(ch => ch.id === id ? { ...ch, ...payload } : ch));
+    setChallenges(prev => prev.map(ch => ch.id === id ? { ...ch, ...payload, doc_url: upd.doc_url } : ch));
     setEditingId(null);
   }
   async function deleteChallenge(id: string) {
@@ -360,7 +404,7 @@ export default function GovernorPage() {
         {
           const { data: chRows } = await getSupabase()
             .from('special_challenges')
-            .select('id,name,description,start_date,end_date')
+            .select('id,name,doc_url,start_date,end_date')
             .order('created_at', { ascending: false });
           const { data: scRows } = await getSupabase()
             .from('special_challenge_team_scores')
@@ -370,7 +414,7 @@ export default function GovernorPage() {
             byId.set(String(r.id), {
               id: String(r.id),
               name: String(r.name),
-              description: r.description || '',
+              doc_url: r.doc_url || null,
               start_date: r.start_date || '',
               end_date: r.end_date || '',
               scores: emptyScores(teamList),
@@ -615,6 +659,30 @@ export default function GovernorPage() {
     return sortedIndividuals.slice(from, to);
   }, [sortedIndividuals, ilbPageSafe]);
 
+  // Helpers: format date ranges without year as 'Mon d – Mon d'
+  function formatRangeNoYear(startStr: string, endStr: string) {
+    if (!startStr && !endStr) return '—';
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const s = startStr ? parseYmdLocal(startStr) : null;
+    const e = endStr ? parseYmdLocal(endStr) : null;
+    if (s && e) {
+      const sameMonth = s.getMonth() === e.getMonth();
+      const sm = months[s.getMonth()];
+      const em = months[e.getMonth()];
+      const sd = s.getDate(); const ed = e.getDate();
+      return sameMonth ? `${sm} ${sd} – ${ed}` : `${sm} ${sd} – ${em} ${ed}`;
+    }
+    if (s && !e) {
+      const sm = months[s.getMonth()]; const sd = s.getDate();
+      return `${sm} ${sd}`;
+    }
+    if (!s && e) {
+      const em = months[e.getMonth()]; const ed = e.getDate();
+      return `${em} ${ed}`;
+    }
+    return '—';
+  }
+
   if (status === 'loading' || loading || !asOf) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-6">
@@ -715,6 +783,7 @@ export default function GovernorPage() {
                   value={draft.start_date} onChange={(e)=>setDraft(v=>({...v, start_date: e.target.value}))} />
                 <input className="border rounded px-2 py-1 text-sm" placeholder="End date (YYYY-MM-DD)"
                   value={draft.end_date} onChange={(e)=>setDraft(v=>({...v, end_date: e.target.value}))} />
+                <input className="border rounded px-2 py-1 text-sm" type="file" accept="application/pdf,.pdf" onChange={(e)=> setDraft(v=>({...v, file: e.target.files?.[0] || null}))} />
                 <div className="flex items-center gap-2">
                   <button className="inline-flex items-center gap-1 px-3 py-1.5 rounded text-sm bg-rfl-navy text-white"
                     onClick={addChallenge}><Save className="w-4 h-4" /> Save</button>
@@ -722,8 +791,6 @@ export default function GovernorPage() {
                     onClick={()=>setCreateOpen(false)}><X className="w-4 h-4" /> Cancel</button>
                 </div>
               </div>
-              <textarea className="mt-2 w-full border rounded px-2 py-1 text-sm" rows={2} placeholder="Description"
-                value={draft.description} onChange={(e)=>setDraft(v=>({...v, description: e.target.value}))} />
             </div>
           )}
 
@@ -746,28 +813,24 @@ export default function GovernorPage() {
                     <tr key={ch.id} className="border-t align-top">
                       <td className="py-2 pr-2">
                         {!editing ? (
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium text-rfl-navy">{ch.name}</span>
-                            <button className="p-1 rounded hover:bg-gray-100" onClick={()=> setDescOpenId(v => v === ch.id ? null : ch.id)} title="Show description">
-                              <Info className="w-4 h-4 text-gray-600" />
-                            </button>
-                          </div>
+                          <button className="font-medium text-blue-600 underline hover:text-blue-700" onClick={()=>{
+                            if (!ch.doc_url) return;
+                            setViewerUrl(ch.doc_url);
+                          }}>{ch.name}</button>
                         ) : (
                           <input className="border rounded px-2 py-1 text-sm w-full" value={ch.name}
                             onChange={(e)=> setChallenges(prev => prev.map(c => c.id===ch.id ? ({ ...c, name: e.target.value }) : c))} />
                         )}
-                        {descOpenId === ch.id && !editing && ch.description && (
-                          <div className="mt-2 text-xs text-gray-600 whitespace-pre-wrap">{ch.description}</div>
-                        )}
                         {editing && (
-                          <textarea className="mt-2 w-full border rounded px-2 py-1 text-sm" rows={2}
-                            value={ch.description}
-                            onChange={(e)=> setChallenges(prev => prev.map(c => c.id===ch.id ? ({ ...c, description: e.target.value }) : c))} />
+                          <div className="mt-2">
+                            <input className="border rounded px-2 py-1 text-sm" type="file" accept="application/pdf,.pdf" onChange={(e)=> setEditFiles(prev => ({ ...prev, [ch.id]: e.target.files?.[0] || null }))} />
+                            {ch.doc_url && <div className="text-xs text-gray-600 mt-1">Current file uploaded</div>}
+                          </div>
                         )}
                       </td>
                       <td className="py-2 pr-2 whitespace-nowrap">
                         {!editing ? (
-                          <span className="text-gray-700">{(ch.start_date || '—')} → {(ch.end_date || '—')}</span>
+                          <span className="text-gray-700">{formatRangeNoYear(ch.start_date, ch.end_date)}</span>
                         ) : (
                           <div className="grid grid-cols-1 gap-1">
                             <input className="border rounded px-2 py-1 text-sm" placeholder="YYYY-MM-DD" value={ch.start_date}
@@ -814,6 +877,14 @@ export default function GovernorPage() {
             </table>
           </div>
         </div>
+        {!!viewerUrl && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center" onClick={()=> setViewerUrl(null)}>
+            <div className="bg-white w-[95%] h-[85%] max-w-5xl rounded shadow relative" onClick={(e)=> e.stopPropagation()}>
+              <button className="absolute top-2 right-2 p-2 rounded border hover:bg-gray-50" onClick={()=> setViewerUrl(null)} aria-label="Close"><X className="w-4 h-4" /></button>
+              <iframe src={viewerUrl || ''} className="w-full h-full rounded-b" title="Challenge document"></iframe>
+            </div>
+          </div>
+        )}
       </>
       )}
 
