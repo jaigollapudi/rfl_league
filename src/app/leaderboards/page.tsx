@@ -19,12 +19,15 @@ type TeamStanding = {
   delta: number; // position change vs previous day within the selected period (negative means moved up)
 };
 
-// Proportional points adjustment for 13-player teams (display-only)
-const THIRTEEN_PLAYER_TEAMS = new Set<string>([
-  'dbecc2c2-6184-4692-a0f7-693adeae0b81', // Frolic Fetizens
-  '7059747a-d1b8-479c-aff2-6a6a79c88998', // Interstellar
+// Updated roster-based proportional adjustment (display-only) for player/leader leaderboard:
+// - Teams with 12 players: 12/12 (factor 1)
+// - Teams with 11 players: 12/11 (factor 12/11)
+// We map by team name to avoid relying on fixed UUIDs.
+const ELEVEN_PLAYER_TEAMS_BY_NAME = new Set<string>([
+  'pristine titans',
+  'interstellar',
+  'amigos',
 ]);
-const THIRTEEN_TEAM_FACTOR = 12 / 13;
 
 export default function LeaderboardsPage() {
   const { data: session } = useSession();
@@ -206,12 +209,12 @@ export default function LeaderboardsPage() {
             if (isRest && rr > 0) pts += 1; else if (!isRest) pts += 1;
             if (rr > 0) { rrSum += rr; rrCnt += 1; }
           });
-          // Apply proportional factor for 13-player teams, then ROUND to nearest integer
-          let adjusted = pts;
-          if (THIRTEEN_PLAYER_TEAMS.has(tid)) {
-            adjusted = pts * THIRTEEN_TEAM_FACTOR;
-          }
-          const pointsRounded = Math.round(adjusted);
+          // Apply proportional factor based on latest roster sizes:
+          // - 12 players => factor 1 (12/12)
+          // - 11 players => factor 12/11
+          const teamNameLower = String(team.name).toLowerCase();
+          const factor = ELEVEN_PLAYER_TEAMS_BY_NAME.has(teamNameLower) ? (12 / 11) : 1;
+          const pointsRounded = Math.round(pts * factor);
           // Add Special Challenge bonus AFTER proportional rounding (display-only rule)
           const bonus = Number(challengeBonusByTeam.get(tid) || 0);
           const finalPoints = pointsRounded + (Number.isFinite(bonus) ? bonus : 0);
