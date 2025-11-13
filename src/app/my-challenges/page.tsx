@@ -130,7 +130,7 @@ export default function MyChallengesPage() {
           >
             <div className="px-2 py-2 border-b">
               <div className="text-sm font-semibold text-gray-700">Challenge</div>
-              <div className="text-xs text-gray-500 mt-1">Team</div>
+              <div className="text-xs text-gray-500 mt-1">Timeline</div>
             </div>
             {challenges.map((ch) => (
               <div key={`h-${ch.id}`} className="pl-4 pr-3 py-2 border-b whitespace-nowrap">
@@ -140,7 +140,7 @@ export default function MyChallengesPage() {
                 >
                   {ch.name}
                 </button>
-                <div className="text-xs text-gray-500 mt-1">{formatRangeNoYear(ch.start_date, ch.end_date)}</div>
+                <div className="text-xs font-semibold text-gray-700 mt-1">{formatRangeNoYear(ch.start_date, ch.end_date)}</div>
               </div>
             ))}
 
