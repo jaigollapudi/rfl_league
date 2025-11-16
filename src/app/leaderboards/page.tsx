@@ -30,10 +30,8 @@ const CANONICAL_ROSTER_SIZE = 12;
 const TEAM_ROSTER_SIZES: Record<string, number> = {
   "pristine titans": 11,
   "interstellar": 11,
-  "amigos": 11,   // YOU SAID AMIGOS = 11 PLAYERS
+  "amigos": 10,   // YOU SAID AMIGOS = 11 PLAYERS
 
-  // ADD YOUR 10-PLAYER TEAM HERE (lowercase):
-  "crusaders": 10,   // ← replace this if your 10-player team is different
 };
 
 // Returns multiplier: 12/12, 12/11, 12/10, etc.
