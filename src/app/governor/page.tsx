@@ -23,12 +23,27 @@ type Challenge = {
   scores: Record<string, number | null>; // key: team_id
 };
 
-// Display-only proportional adjustment for 13-player teams
-const THIRTEEN_PLAYER_TEAMS = new Set<string>([
-  'dbecc2c2-6184-4692-a0f7-693adeae0b81', // Frolic Fetizens
-  '7059747a-d1b8-479c-aff2-6a6a79c88998', // Interstellar
-]);
-const THIRTEEN_TEAM_FACTOR = 12 / 13;
+// ---------------------------
+//  ROSTER BALANCING (MATCHES PLAYER VIEW)
+// ---------------------------
+
+// Canonical "full" roster size
+const CANONICAL_ROSTER_SIZE = 12;
+
+// Set roster sizes by team name (lowercase).
+// NOTE: Keep this in sync with src/app/leaderboards/page.tsx
+const TEAM_ROSTER_SIZES: Record<string, number> = {
+  'pristine titans': 11,
+  'interstellar': 11,
+  'amigos': 10, // current roster smaller than 12
+};
+
+// Returns multiplier: 12/12, 12/11, 12/10, etc.
+function getRosterFactor(teamName: string): number {
+  const size = TEAM_ROSTER_SIZES[teamName.toLowerCase()] ?? CANONICAL_ROSTER_SIZE;
+  if (size >= CANONICAL_ROSTER_SIZE) return 1;
+  return CANONICAL_ROSTER_SIZE / size;
+}
 
 // Local-date helpers (device-local semantics)
 function ymdLocal(d: Date) {
@@ -297,13 +312,21 @@ export default function GovernorPage() {
         setLeagueAccounts(filteredAccounts.map(a=>({ id: String(a.id), role: a.role, team_id: a.team_id ? String(a.team_id) : null, age: (typeof a.age === 'number' ? a.age : null), gender: (a as any).gender ?? null })));
 
         // Entries for season-to-date up to asOf (yesterday local)
-        const { data: ents } = await getSupabase()
-          .from('entries')
-          .select('user_id,team_id,workout_type,duration,distance,steps,type,status,date,rr_value')
-          .gte('date', SEASON_START)
-          .lte('date', asOf)
-          .eq('status', 'approved');
-        const all = (ents || []) as Array<{ user_id: string; team_id: string | null; type: string; rr_value: number | null; workout_type: string | null; duration: number | null; distance: number | null; steps: number | null; date: string }>;        
+        // Query per team to avoid Supabase 1000-row default limit
+        const allEntries: Array<{ user_id: string; team_id: string | null; type: string; rr_value: number | null; workout_type: string | null; duration: number | null; distance: number | null; steps: number | null; date: string }> = [];
+        for (const team of teamList) {
+          const { data: teamEnts } = await getSupabase()
+            .from('entries')
+            .select('user_id,team_id,workout_type,duration,distance,steps,type,status,date,rr_value')
+            .eq('team_id', String(team.id))
+            .gte('date', SEASON_START)
+            .lte('date', asOf)
+            .eq('status', 'approved');
+          if (teamEnts) {
+            allEntries.push(...(teamEnts as any[]));
+          }
+        }
+        const all = allEntries;
         setEntriesForAggregates(all);
         // Build rest-day counts per user for season to date through asOf
         const restMap: Record<string, number> = {};
@@ -330,27 +353,64 @@ export default function GovernorPage() {
         });
         setMissedDaysByUser(missedMap);
 
-        // Team aggregates from entries (points = count of approved entries; RR avg excluding zero values)
-        const teamAgg = new Map<string, { points: number; rrSum: number; rrCnt: number }>();
-        for (const e of all) {
-          const tid = String(e.team_id || '');
-          if (!tid) continue;
-          const rec = teamAgg.get(tid) || { points: 0, rrSum: 0, rrCnt: 0 };
-          rec.points += 1;
-          const rr = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
-          if (rr > 0) { rec.rrSum += rr; rec.rrCnt += 1; }
-          teamAgg.set(tid, rec);
-        }
-        const teamRows: TeamRow[] = teamList.map(t => {
-          const agg = teamAgg.get(String(t.id)) || { points: 0, rrSum: 0, rrCnt: 0 };
-          const avg = agg.rrCnt > 0 ? Math.round((agg.rrSum / agg.rrCnt) * 100) / 100 : 0;
-          let adjusted = agg.points;
-          if (THIRTEEN_PLAYER_TEAMS.has(String(t.id))) {
-            adjusted = agg.points * THIRTEEN_TEAM_FACTOR;
-          }
-          const pointsRounded = Math.round(adjusted);
-          return { team_id: String(t.id), team_name: String(t.name), points: pointsRounded, avg_rr: avg } as TeamRow;
+        // --- Team aggregates: query PER TEAM (same as player leaderboard) to avoid row limits ---
+        // Build Special Challenge bonus per team (sum of scores)
+        const { data: chScores } = await getSupabase()
+          .from('special_challenge_team_scores')
+          .select('team_id, score');
+        const challengeBonusByTeam = new Map<string, number>();
+        (chScores || []).forEach((r: any) => {
+          const tid = String(r.team_id);
+          const val = Number(r.score || 0);
+          challengeBonusByTeam.set(tid, (challengeBonusByTeam.get(tid) || 0) + val);
         });
+
+        // Query entries per team (mirrors player leaderboard compute function)
+        const teamRows: TeamRow[] = [];
+        for (const team of teamList) {
+          const tid = String(team.id);
+
+          const { data: teamEntries } = await getSupabase()
+            .from('entries')
+            .select('type, rr_value, date')
+            .eq('team_id', tid)
+            .eq('status', 'approved')
+            .gte('date', SEASON_START)
+            .lte('date', asOf);
+
+          const ents = teamEntries || [];
+          let pts = 0, rrSum = 0, rrCnt = 0;
+
+          ents.forEach((e2: any) => {
+            const rr = Number(e2.rr_value || 0);
+            const isRest = e2.type === 'rest';
+
+            if (isRest && rr > 0) pts += 1;
+            else if (!isRest) pts += 1;
+
+            if (rr > 0) {
+              rrSum += rr;
+              rrCnt++;
+            }
+          });
+
+          const factor = getRosterFactor(String(team.name));
+          const pointsRounded = Math.round(pts * factor);
+
+          const bonus = Number(challengeBonusByTeam.get(tid) || 0);
+          const finalPoints = pointsRounded + bonus;
+
+          const avgRR = rrCnt > 0 ? Math.round((rrSum / rrCnt) * 100) / 100 : 0;
+
+          teamRows.push({
+            team_id: tid,
+            team_name: String(team.name),
+            points: finalPoints,
+            avg_rr: avgRR,
+          } as TeamRow);
+        }
+
+        teamRows.sort((a, b) => (b.points - a.points) || ((b.avg_rr || 0) - (a.avg_rr || 0)));
         setTeamLeaderboard(teamRows);
 
         // Individual leaderboard from entries
