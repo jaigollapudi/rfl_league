@@ -92,7 +92,19 @@ export default function TeamPage() {
   const [page, setPage] = useState<number>(1);
   const pageSize = 10;
   const [previewEntry, setPreviewEntry] = useState<PendingEntry | null>(null);
-  const [selectedPeriod, setSelectedPeriod] = useState<string>("overall");
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
+    // Default to current week instead of "overall"
+    const seasonStart = firstWeekStart(0);
+    const today = new Date();
+    
+    // If before season start, default to overall
+    if (today.getTime() < seasonStart.getTime()) return "overall";
+    
+    // Calculate which week we're in
+    const daysSinceStart = Math.floor((today.getTime() - seasonStart.getTime()) / (24 * 3600 * 1000));
+    const weekNum = Math.floor(daysSinceStart / 7) + 1;
+    return `week-${weekNum}`;
+  });
   const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
   const [teamMissedDays, setTeamMissedDays] = useState<number>(0);
   const [teamRestDays, setTeamRestDays] = useState<number>(0);

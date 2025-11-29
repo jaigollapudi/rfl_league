@@ -212,7 +212,19 @@ export default function LeaderboardsPage() {
     return opts;
   }, [seasonStartDate]);
 
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('overall');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
+    // Default to current week instead of "overall"
+    const seasonStart = new Date(2025, 9, 25); // Oct 25, 2025
+    const today = new Date();
+    
+    // If before season start, default to overall
+    if (today.getTime() < seasonStart.getTime()) return 'overall';
+    
+    // Calculate which week we're in
+    const daysSinceStart = Math.floor((today.getTime() - seasonStart.getTime()) / (24 * 3600 * 1000));
+    const weekNum = Math.floor(daysSinceStart / 7) + 1;
+    return `week-${weekNum}`;
+  });
   const currentPeriod = periodOptions.find(o => o.value === selectedPeriod) || periodOptions[0];
 
   // STANDINGS FOR PERIOD
@@ -230,15 +242,36 @@ export default function LeaderboardsPage() {
       const { data: allTeams } = await getSupabase().from('teams').select('id, name');
       const teams = allTeams || [];
 
+      // Fetch challenges with their end_dates and scores
+      const { data: challenges } = await getSupabase()
+        .from('special_challenges')
+        .select('id, end_date');
+      
       const { data: chScores } = await getSupabase()
         .from('special_challenge_team_scores')
-        .select('team_id, score');
+        .select('challenge_id, team_id, score');
 
+      // Build a map of challenge_id -> end_date
+      const challengeEndDates = new Map<string, string>();
+      (challenges || []).forEach((c: any) => {
+        challengeEndDates.set(String(c.id), c.end_date || '');
+      });
+
+      // Only include challenge bonus if the challenge's end_date falls within the selected period
+      const periodStartStr = ymdLocal(start);
+      const periodEndStr = ymdLocal(end);
+      
       const challengeBonusByTeam = new Map<string, number>();
       (chScores || []).forEach((r: any) => {
-        const tid = String(r.team_id);
-        const val = Number(r.score || 0);
-        challengeBonusByTeam.set(tid, (challengeBonusByTeam.get(tid) || 0) + val);
+        const challengeId = String(r.challenge_id);
+        const challengeEndDate = challengeEndDates.get(challengeId) || '';
+        
+        // Only add bonus if challenge end_date is within the selected period
+        if (challengeEndDate && challengeEndDate >= periodStartStr && challengeEndDate <= periodEndStr) {
+          const tid = String(r.team_id);
+          const val = Number(r.score || 0);
+          challengeBonusByTeam.set(tid, (challengeBonusByTeam.get(tid) || 0) + val);
+        }
       });
 
       const compute = async (s: Date, e: Date) => {

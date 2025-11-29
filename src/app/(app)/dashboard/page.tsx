@@ -192,7 +192,24 @@ export default function DashboardPage() {
   const [myAvgRR, setMyAvgRR] = useState<number | null>(null);
   const [myMissedDays, setMyMissedDays] = useState<number>(0);
   const [myRestUsed, setMyRestUsed] = useState<number>(0);
-  const [viewWeekStart, setViewWeekStart] = useState<Date>(() => seasonFixedStart());
+  const [viewWeekStart, setViewWeekStart] = useState<Date>(() => {
+    // Initialize to current week (the week containing today)
+    const today = new Date();
+    const seasonStart = seasonFixedStart();
+    const seasonEnd = seasonFixedEnd();
+    
+    // If before season start, show week 1
+    if (today.getTime() < seasonStart.getTime()) return seasonStart;
+    // If after season end, show last week
+    if (today.getTime() > seasonEnd.getTime()) {
+      const diffDays = Math.floor((seasonEnd.getTime() - seasonStart.getTime()) / (7 * 24 * 3600 * 1000));
+      return addDaysUTC(seasonStart, diffDays * 7);
+    }
+    // Calculate which week we're in
+    const daysSinceStart = Math.floor((today.getTime() - seasonStart.getTime()) / (24 * 3600 * 1000));
+    const weekIndex = Math.floor(daysSinceStart / 7);
+    return addDaysUTC(seasonStart, weekIndex * 7);
+  });
 
   const currentConfig = ACTIVITY_CONFIGS[activity];
   const sessionAge = (session?.user as any)?.age as number | undefined;
