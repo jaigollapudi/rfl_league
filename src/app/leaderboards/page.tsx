@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Volume2, VolumeX } from 'lucide-react';
+import { Volume2, VolumeX, Info } from 'lucide-react';
 import { getSupabase } from "@/lib/supabase";
 
 type TeamRow = { team_id: string; team_name: string; points: number; avg_rr: number | null };
@@ -17,6 +17,15 @@ type TeamStanding = {
   avgRR: number;
   position: number; 
   delta: number; 
+};
+
+type RealTimeStanding = {
+  teamId: string;
+  teamName: string;
+  todayPoints: number;
+  yesterdayPoints: number;
+  avgRR: number;
+  position: number;
 };
 
 // ---------------------------
@@ -68,6 +77,8 @@ export default function LeaderboardsPage() {
   const [isLoadingPeriod, setIsLoadingPeriod] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [showTopInfo, setShowTopInfo] = useState(false);
+  const [showRealTimeInfo, setShowRealTimeInfo] = useState(false);
 
   // AUDIO LOGIC
   const ensureAudio = () => {
@@ -212,23 +223,32 @@ export default function LeaderboardsPage() {
     return opts;
   }, [seasonStartDate]);
 
-  const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
-    // Default to current week instead of "overall"
-    const seasonStart = new Date(2025, 9, 25); // Oct 25, 2025
-    const today = new Date();
-    
-    // If before season start, default to overall
-    if (today.getTime() < seasonStart.getTime()) return 'overall';
-    
-    // Calculate which week we're in
-    const daysSinceStart = Math.floor((today.getTime() - seasonStart.getTime()) / (24 * 3600 * 1000));
-    const weekNum = Math.floor(daysSinceStart / 7) + 1;
-    return `week-${weekNum}`;
-  });
+  // Default to "Season Total" (overall)
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('overall');
   const currentPeriod = periodOptions.find(o => o.value === selectedPeriod) || periodOptions[0];
 
-  // STANDINGS FOR PERIOD
+  // STANDINGS FOR PERIOD (as of day before yesterday)
   const [standings, setStandings] = useState<TeamStanding[]>([]);
+  
+  // REAL-TIME STANDINGS (today + yesterday only)
+  const [realTimeStandings, setRealTimeStandings] = useState<RealTimeStanding[]>([]);
+  const [isLoadingRealTime, setIsLoadingRealTime] = useState(false);
+
+  // Helper: day before yesterday
+  const dayBeforeYesterday = useMemo(() => addDaysLocal(todayLocal(), -2), []);
+  const dayBeforeYesterdayStr = useMemo(() => ymdLocal(dayBeforeYesterday), [dayBeforeYesterday]);
+  
+  // Today and yesterday for real-time table
+  const todayDate = useMemo(() => todayLocal(), []);
+  const yesterdayDate = useMemo(() => addDaysLocal(todayLocal(), -1), []);
+  const todayDateStr = useMemo(() => ymdLocal(todayDate), [todayDate]);
+  const yesterdayDateStr = useMemo(() => ymdLocal(yesterdayDate), [yesterdayDate]);
+  
+  // Format date for display (e.g., "Nov 30")
+  const formatDateDisplay = (d: Date) => {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[d.getMonth()]} ${d.getDate()}`;
+  };
 
   useEffect(() => {
     (async () => {
@@ -236,11 +256,29 @@ export default function LeaderboardsPage() {
       setStandings([]);
 
       const start = currentPeriod.start;
-      const end = currentPeriod.end;
-      const prevEnd = ymdLocal(end) === ymdLocal(start) ? null : addDaysLocal(end, -1);
-
+      // Use day before yesterday as the end date for the top table
+      const periodEnd = dayBeforeYesterday < currentPeriod.end ? dayBeforeYesterday : currentPeriod.end;
+      
+      // If period end is before period start, show empty standings (0 points for all)
       const { data: allTeams } = await getSupabase().from('teams').select('id, name');
       const teams = allTeams || [];
+      
+      if (periodEnd < start) {
+        // Show all teams with 0 points
+        const emptyStandings = teams.map((team, idx) => ({
+          teamId: String(team.id),
+          teamName: String(team.name),
+          points: 0,
+          avgRR: 0,
+          position: idx + 1,
+          delta: 0,
+        }));
+        setStandings(emptyStandings);
+        setIsLoadingPeriod(false);
+        return;
+      }
+      
+      const prevEnd = ymdLocal(periodEnd) === ymdLocal(start) ? null : addDaysLocal(periodEnd, -1);
 
       // Fetch challenges with their end_dates and scores
       const { data: challenges } = await getSupabase()
@@ -257,9 +295,9 @@ export default function LeaderboardsPage() {
         challengeEndDates.set(String(c.id), c.end_date || '');
       });
 
-      // Only include challenge bonus if the challenge's end_date falls within the selected period
+      // Only include challenge bonus if the challenge's end_date falls within the selected period (up to day before yesterday)
       const periodStartStr = ymdLocal(start);
-      const periodEndStr = ymdLocal(end);
+      const periodEndStr = ymdLocal(periodEnd);
       
       const challengeBonusByTeam = new Map<string, number>();
       (chScores || []).forEach((r: any) => {
@@ -326,8 +364,8 @@ export default function LeaderboardsPage() {
         return res;
       };
 
-      const curr = await compute(start, end);
-      const prev = prevEnd ? await compute(start, prevEnd) : null;
+      const curr = await compute(start, periodEnd);
+      const prev = prevEnd && prevEnd >= start ? await compute(start, prevEnd) : null;
 
       const posPrev = new Map<string, number>();
       if (prev) prev.forEach((t: any, i: number) => posPrev.set(t.teamId, i + 1));
@@ -342,23 +380,139 @@ export default function LeaderboardsPage() {
       setStandings(withMeta);
       setIsLoadingPeriod(false);
     })();
-  }, [selectedPeriod]);
+  }, [selectedPeriod, dayBeforeYesterday]);
+
+  // REAL-TIME SCOREBOARD: fetch today's and yesterday's entries
+  useEffect(() => {
+    (async () => {
+      setIsLoadingRealTime(true);
+      setRealTimeStandings([]);
+
+      const { data: allTeams } = await getSupabase().from('teams').select('id, name');
+      const teams = allTeams || [];
+
+      const results: RealTimeStanding[] = [];
+
+      for (const team of teams) {
+        const tid = String(team.id);
+
+        // Fetch today's entries
+        const { data: todayEntries } = await getSupabase()
+          .from('entries')
+          .select('type, rr_value')
+          .eq('team_id', tid)
+          .eq('status', 'approved')
+          .eq('date', todayDateStr);
+
+        // Fetch yesterday's entries
+        const { data: yesterdayEntries } = await getSupabase()
+          .from('entries')
+          .select('type, rr_value')
+          .eq('team_id', tid)
+          .eq('status', 'approved')
+          .eq('date', yesterdayDateStr);
+
+        const todayEnts = todayEntries || [];
+        const yesterdayEnts = yesterdayEntries || [];
+
+        // Calculate today's points
+        let todayPts = 0;
+        todayEnts.forEach(e => {
+          const rr = Number(e.rr_value || 0);
+          const isRest = e.type === "rest";
+          if (isRest && rr > 0) todayPts += 1;
+          else if (!isRest) todayPts += 1;
+        });
+
+        // Calculate yesterday's points
+        let yesterdayPts = 0;
+        yesterdayEnts.forEach(e => {
+          const rr = Number(e.rr_value || 0);
+          const isRest = e.type === "rest";
+          if (isRest && rr > 0) yesterdayPts += 1;
+          else if (!isRest) yesterdayPts += 1;
+        });
+
+        // Apply roster factor
+        const factor = getRosterFactor(String(team.name));
+        const todayPointsScaled = Math.round(todayPts * factor);
+        const yesterdayPointsScaled = Math.round(yesterdayPts * factor);
+
+        // Calculate avg RR from today only
+        let rrSum = 0, rrCnt = 0;
+        todayEnts.forEach(e => {
+          const rr = Number(e.rr_value || 0);
+          if (rr > 0) {
+            rrSum += rr;
+            rrCnt++;
+          }
+        });
+        const avgRR = rrCnt > 0 ? Math.round((rrSum / rrCnt) * 100) / 100 : 0;
+
+        results.push({
+          teamId: tid,
+          teamName: String(team.name),
+          todayPoints: todayPointsScaled,
+          yesterdayPoints: yesterdayPointsScaled,
+          avgRR,
+          position: 0, // will be set after sorting
+        });
+      }
+
+      // Sort by today's points desc, then avgRR desc
+      results.sort((a, b) => {
+        return (b.todayPoints - a.todayPoints) || (b.avgRR - a.avgRR);
+      });
+
+      // Assign positions
+      results.forEach((r, idx) => {
+        r.position = idx + 1;
+      });
+
+      setRealTimeStandings(results);
+      setIsLoadingRealTime(false);
+    })();
+  }, [todayDateStr, yesterdayDateStr]);
 
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-rfl-navy mb-2">Leaderboard</h1>
-          <p className="text-gray-600">🔥 Today’s Leaderboard – Track your team’s race to the top!</p>
+          <p className="text-gray-600">🔥 Track your team’s race to the top!</p>
         </div>
 
         <div className="space-y-6">
+          {/* TOP TABLE: Standings as of day before yesterday */}
           <Card className="bg-white shadow-md">
             <CardHeader>
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <CardTitle className="text-xl text-rfl-navy">Teams</CardTitle>
-                  <CardDescription>Standings table</CardDescription>
+                  <CardTitle className="text-xl text-rfl-navy">Leaderboard</CardTitle>
+                  <div className="flex items-center gap-1.5">
+                    <CardDescription>Standings as of {formatDateDisplay(dayBeforeYesterday)}</CardDescription>
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowTopInfo(v => !v)}
+                        className="text-gray-400 hover:text-rfl-navy transition-colors"
+                        aria-label="More information"
+                      >
+                        <Info className="w-4 h-4" />
+                      </button>
+                      {showTopInfo && (
+                        <div className="absolute left-0 top-6 z-20 w-72 p-3 bg-white border border-gray-200 rounded-lg shadow-lg text-sm text-gray-700">
+                          <p>This table shows the official standings as of {formatDateDisplay(dayBeforeYesterday)}. Points are finalized and will not change.</p>
+                          <p className="mt-2 text-gray-500">For real-time scores from today and yesterday, check the table below.</p>
+                          <button 
+                            onClick={() => setShowTopInfo(false)}
+                            className="mt-2 text-xs text-rfl-coral hover:underline"
+                          >
+                            Close
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -459,6 +613,98 @@ export default function LeaderboardsPage() {
                       </tr>
                     ) : !standings.length ? (
                       <tr><td colSpan={4} className="py-8 text-center text-gray-600">No data yet.</td></tr>
+                    ) : null}
+
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+
+          </Card>
+
+          {/* BOTTOM TABLE: Real-time Scoreboard (today + yesterday) */}
+          <Card className="bg-white shadow-md">
+            <CardHeader>
+              <div>
+                <CardTitle className="text-xl text-rfl-navy">Real-time Scoreboard</CardTitle>
+                <div className="flex items-center gap-1.5">
+                  <CardDescription>Today's and yesterday's scores</CardDescription>
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowRealTimeInfo(v => !v)}
+                      className="text-gray-400 hover:text-rfl-navy transition-colors"
+                      aria-label="More information"
+                    >
+                      <Info className="w-4 h-4" />
+                    </button>
+                    {showRealTimeInfo && (
+                      <div className="absolute left-0 top-6 z-20 w-72 p-3 bg-white border border-gray-200 rounded-lg shadow-lg text-sm text-gray-700">
+                        <p>This table shows real-time scores ranked by today's points and Avg RR. These standings are subject to change as more entries come in.</p>
+                        <p className="mt-2 text-gray-500">For official finalized standings, please refer to the Leaderboard table above.</p>
+                        <button 
+                          onClick={() => setShowRealTimeInfo(false)}
+                          className="mt-2 text-xs text-rfl-coral hover:underline"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-gray-600">
+                    <tr>
+                      <th className="py-2 pr-2 text-xs font-semibold w-12">Rank</th>
+                      <th className="py-2 pr-2 text-xs font-semibold">Team Name</th>
+                      <th className="py-2 pr-2 text-xs font-semibold text-right whitespace-nowrap">{formatDateDisplay(todayDate)}</th>
+                      <th className="py-2 pr-2 text-xs font-semibold text-right whitespace-nowrap">{formatDateDisplay(yesterdayDate)}</th>
+                      <th className="py-2 pr-2 text-xs font-semibold text-right">Avg RR</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {realTimeStandings.map(t => {
+                      const logoName = t.teamName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '') + '_Logo.jpeg';
+                      const logoPath = `/img/${logoName}`;
+
+                      return (
+                        <tr key={t.teamId} className="border-t hover:bg-gray-50">
+                          <td className="py-2 pr-2 font-bold text-rfl-navy text-sm w-12">{t.position}</td>
+                          <td className="py-2 pr-2">
+                            <div className="flex items-center gap-2">
+                              <img
+                                src={logoPath}
+                                onError={e => ((e.target as HTMLImageElement).src = '/img/placeholder-team.svg')}
+                                className="w-6 h-6 rounded border object-cover"
+                              />
+                              <span className="font-medium text-rfl-navy text-sm whitespace-nowrap">{t.teamName}</span>
+                            </div>
+                          </td>
+                          <td className="py-2 pr-2 text-right font-bold text-rfl-coral text-sm">{t.todayPoints}</td>
+                          <td className="py-2 pr-2 text-right font-bold text-rfl-coral text-sm">{t.yesterdayPoints}</td>
+                          <td className="py-2 pr-2 text-right font-semibold text-rfl-navy text-sm">
+                            {t.avgRR.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {isLoadingRealTime ? (
+                      <tr>
+                        <td colSpan={5} className="py-8 text-center text-gray-600">
+                          <div className="flex items-center justify-center gap-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-rfl-coral"></div>
+                            <span>Loading...</span>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : !realTimeStandings.length ? (
+                      <tr><td colSpan={5} className="py-8 text-center text-gray-600">No data yet.</td></tr>
                     ) : null}
 
                   </tbody>
