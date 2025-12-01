@@ -503,7 +503,7 @@ export default function LeaderboardsPage() {
                         <>
                           {/* Backdrop to close on tap outside */}
                           <div className="fixed inset-0 z-10" onClick={() => setShowTopInfo(false)} />
-                          <div className="fixed left-4 right-4 top-1/3 z-20 mx-auto max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-xl text-sm text-gray-700 sm:absolute sm:left-0 sm:right-auto sm:top-6 sm:w-72 sm:max-w-none sm:mx-0 sm:p-3">
+                          <div className="absolute left-0 top-6 z-20 w-[calc(100vw-2rem)] max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-xl text-sm text-gray-700 sm:w-72 sm:p-3">
                             <p>This table shows the official standings as of {formatDateDisplay(dayBeforeYesterday)}. Points are finalized and will not change.</p>
                             <p className="mt-2 text-gray-500">For real-time scores from today and yesterday, check the table below.</p>
                             <button 
@@ -645,7 +645,7 @@ export default function LeaderboardsPage() {
                       <>
                         {/* Backdrop to close on tap outside */}
                         <div className="fixed inset-0 z-10" onClick={() => setShowRealTimeInfo(false)} />
-                        <div className="fixed left-4 right-4 top-1/3 z-20 mx-auto max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-xl text-sm text-gray-700 sm:absolute sm:left-0 sm:right-auto sm:top-6 sm:w-72 sm:max-w-none sm:mx-0 sm:p-3">
+                        <div className="absolute left-0 top-6 z-20 w-[calc(100vw-2rem)] max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-xl text-sm text-gray-700 sm:w-72 sm:p-3">
                           <p>This table shows real-time scores ranked by today's points and Avg RR. These standings are subject to change as more entries come in.</p>
                           <p className="mt-2 text-gray-500">For official finalized standings, please refer to the Leaderboard table above.</p>
                           <button 
