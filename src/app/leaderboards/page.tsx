@@ -490,7 +490,7 @@ export default function LeaderboardsPage() {
                 <div>
                   <CardTitle className="text-xl text-rfl-navy">Leaderboard</CardTitle>
                   <div className="flex items-center gap-1.5">
-                    <CardDescription>Standings as of {formatDateDisplay(dayBeforeYesterday)}</CardDescription>
+                    <CardDescription>As of {formatDateDisplay(dayBeforeYesterday)}</CardDescription>
                     <div className="relative">
                       <button
                         onClick={() => setShowTopInfo(v => !v)}
@@ -500,16 +500,20 @@ export default function LeaderboardsPage() {
                         <Info className="w-4 h-4" />
                       </button>
                       {showTopInfo && (
-                        <div className="absolute left-0 top-6 z-20 w-72 p-3 bg-white border border-gray-200 rounded-lg shadow-lg text-sm text-gray-700">
-                          <p>This table shows the official standings as of {formatDateDisplay(dayBeforeYesterday)}. Points are finalized and will not change.</p>
-                          <p className="mt-2 text-gray-500">For real-time scores from today and yesterday, check the table below.</p>
-                          <button 
-                            onClick={() => setShowTopInfo(false)}
-                            className="mt-2 text-xs text-rfl-coral hover:underline"
-                          >
-                            Close
-                          </button>
-                        </div>
+                        <>
+                          {/* Backdrop to close on tap outside */}
+                          <div className="fixed inset-0 z-10" onClick={() => setShowTopInfo(false)} />
+                          <div className="fixed left-4 right-4 top-1/3 z-20 mx-auto max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-xl text-sm text-gray-700 sm:absolute sm:left-0 sm:right-auto sm:top-6 sm:w-72 sm:max-w-none sm:mx-0 sm:p-3">
+                            <p>This table shows the official standings as of {formatDateDisplay(dayBeforeYesterday)}. Points are finalized and will not change.</p>
+                            <p className="mt-2 text-gray-500">For real-time scores from today and yesterday, check the table below.</p>
+                            <button 
+                              onClick={() => setShowTopInfo(false)}
+                              className="mt-3 text-xs text-rfl-coral hover:underline"
+                            >
+                              Close
+                            </button>
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
@@ -638,16 +642,20 @@ export default function LeaderboardsPage() {
                       <Info className="w-4 h-4" />
                     </button>
                     {showRealTimeInfo && (
-                      <div className="absolute left-0 top-6 z-20 w-72 p-3 bg-white border border-gray-200 rounded-lg shadow-lg text-sm text-gray-700">
-                        <p>This table shows real-time scores ranked by today's points and Avg RR. These standings are subject to change as more entries come in.</p>
-                        <p className="mt-2 text-gray-500">For official finalized standings, please refer to the Leaderboard table above.</p>
-                        <button 
-                          onClick={() => setShowRealTimeInfo(false)}
-                          className="mt-2 text-xs text-rfl-coral hover:underline"
-                        >
-                          Close
-                        </button>
-                      </div>
+                      <>
+                        {/* Backdrop to close on tap outside */}
+                        <div className="fixed inset-0 z-10" onClick={() => setShowRealTimeInfo(false)} />
+                        <div className="fixed left-4 right-4 top-1/3 z-20 mx-auto max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow-xl text-sm text-gray-700 sm:absolute sm:left-0 sm:right-auto sm:top-6 sm:w-72 sm:max-w-none sm:mx-0 sm:p-3">
+                          <p>This table shows real-time scores ranked by today's points and Avg RR. These standings are subject to change as more entries come in.</p>
+                          <p className="mt-2 text-gray-500">For official finalized standings, please refer to the Leaderboard table above.</p>
+                          <button 
+                            onClick={() => setShowRealTimeInfo(false)}
+                            className="mt-3 text-xs text-rfl-coral hover:underline"
+                          >
+                            Close
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
