@@ -687,10 +687,7 @@ export default function DashboardPage() {
               <Music4Icon className="w-6 h-6 text-rfl-navy" />
             </button>
           </div>
-          <div className="flex items-center justify-between">
-            <p className="text-gray-600">Let's crush those fitness goals today 💪</p>
-            <p className="text-sm text-gray-600">PFL Anthem</p>
-          </div>
+          <p className="text-gray-600">Let's crush those fitness goals today 💪</p>
         </div>
         <Card>
           <CardHeader>
@@ -873,6 +870,7 @@ export default function DashboardPage() {
       {showAudioPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 space-y-4">
+            <h2 className="text-2xl font-semibold text-rfl-navy">PFL Anthem</h2>
             <div className="w-full">
               <audio
                 controls
