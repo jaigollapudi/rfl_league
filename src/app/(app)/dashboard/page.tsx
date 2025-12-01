@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, Calendar, ChevronLeft, ChevronRight, TrendingUp } from "lucide-react";
+import { Plus, Calendar, ChevronLeft, ChevronRight, TrendingUp, Music4 as Music4Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
@@ -192,6 +192,7 @@ export default function DashboardPage() {
   const [myAvgRR, setMyAvgRR] = useState<number | null>(null);
   const [myMissedDays, setMyMissedDays] = useState<number>(0);
   const [myRestUsed, setMyRestUsed] = useState<number>(0);
+  const [showAudioPopup, setShowAudioPopup] = useState(false);
   const [viewWeekStart, setViewWeekStart] = useState<Date>(() => {
     // Initialize to current week (the week containing today)
     const today = new Date();
@@ -675,9 +676,22 @@ export default function DashboardPage() {
       <div className="max-w-4xl mx-auto space-y-8 mb-8">
         {/* Dashboard title positioned above Summary card content */}
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold text-rfl-navy mb-2">Welcome, {session?.user?.name?.split(' ')[0] || 'User'}!</h1>
-          <p className="text-gray-600">Let's crush those fitness goals today 💪</p>
-      </div>
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-3xl font-bold text-rfl-navy">Welcome, {session?.user?.name?.split(' ')[0] || 'User'}!</h1>
+            <button
+              onClick={() => setShowAudioPopup(true)}
+              className="p-3 rounded-md border border-gray-300 hover:bg-gray-50 bg-white flex items-center justify-center -translate-x-[10px] translate-y-[10px] transform"
+              aria-label="Show audio"
+              title="Play RFL Anthem"
+            >
+              <Music4Icon className="w-6 h-6 text-rfl-navy" />
+            </button>
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-gray-600">Let's crush those fitness goals today 💪</p>
+            <p className="text-sm text-gray-600">PFL Anthem</p>
+          </div>
+        </div>
         <Card>
           <CardHeader>
             <div className="flex items-center gap-2">
@@ -855,6 +869,29 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {showAudioPopup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-2xl font-semibold text-rfl-navy">PFL Anthem</h2>
+            </div>
+            <div className="w-full">
+              <audio
+                controls
+                autoPlay
+                className="w-full rounded-lg"
+              >
+                <source src="/audio/leaderboard-theme.mp3" type="audio/mpeg" />
+                Your browser does not support the audio element.
+              </audio>
+            </div>
+            <Button className="bg-rfl-navy text-white w-full" onClick={() => setShowAudioPopup(false)}>
+              Close
+            </Button>
+          </div>
+        </div>
+      )}
 
       {openWorkout && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
