@@ -438,9 +438,9 @@ export default function LeaderboardsPage() {
         const todayPointsScaled = Math.round(todayPts * factor);
         const yesterdayPointsScaled = Math.round(yesterdayPts * factor);
 
-        // Calculate avg RR from today only
+        // Calculate avg RR from both today and yesterday
         let rrSum = 0, rrCnt = 0;
-        todayEnts.forEach(e => {
+        [...todayEnts, ...yesterdayEnts].forEach(e => {
           const rr = Number(e.rr_value || 0);
           if (rr > 0) {
             rrSum += rr;
@@ -505,7 +505,7 @@ export default function LeaderboardsPage() {
                           <div className="fixed inset-0 z-10" onClick={() => setShowTopInfo(false)} />
                           {/* Mobile: fixed centered below icon area, Desktop: absolute left-aligned */}
                           <div className="fixed left-4 right-4 top-32 z-20 p-4 bg-white border border-gray-200 rounded-lg shadow-xl text-sm text-gray-700 sm:absolute sm:left-0 sm:right-auto sm:top-6 sm:w-72 sm:p-3">
-                            <p>This table shows the official standings as of {formatDateDisplay(dayBeforeYesterday)}. Points are finalized and will not change.</p>
+                            <p>This table shows the official standings as of {formatDateDisplay(dayBeforeYesterday)}. Final points are submitted and cannot be changed.</p>
                             <p className="mt-2 text-gray-500">For real-time scores from today and yesterday, check the table below.</p>
                             <button 
                               onClick={() => setShowTopInfo(false)}
@@ -648,7 +648,7 @@ export default function LeaderboardsPage() {
                         <div className="fixed inset-0 z-10" onClick={() => setShowRealTimeInfo(false)} />
                         {/* Mobile: fixed centered below icon area, Desktop: absolute left-aligned */}
                         <div className="fixed left-4 right-4 top-auto bottom-40 z-20 p-4 bg-white border border-gray-200 rounded-lg shadow-xl text-sm text-gray-700 sm:absolute sm:left-0 sm:right-auto sm:bottom-auto sm:top-6 sm:w-72 sm:p-3">
-                          <p>This table shows real-time scores ranked by today's points and Avg RR. These standings are subject to change as more entries come in.</p>
+                          <p>This table shows real-time scores ranked by today's points. Avg RR is calculated from both today's and yesterday's entries. These standings are subject to change as more entries come in.</p>
                           <p className="mt-2 text-gray-500">For official finalized standings, please refer to the Leaderboard table above.</p>
                           <button 
                             onClick={() => setShowRealTimeInfo(false)}

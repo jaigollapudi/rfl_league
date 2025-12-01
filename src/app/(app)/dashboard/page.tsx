@@ -873,9 +873,6 @@ export default function DashboardPage() {
       {showAudioPopup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-2xl font-semibold text-rfl-navy">PFL Anthem</h2>
-            </div>
             <div className="w-full">
               <audio
                 controls
