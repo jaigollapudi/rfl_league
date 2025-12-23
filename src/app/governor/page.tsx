@@ -311,7 +311,7 @@ export default function GovernorPage() {
           .filter(a => (a.role === 'player' || a.role === 'leader'));
         setLeagueAccounts(filteredAccounts.map(a=>({ id: String(a.id), role: a.role, team_id: a.team_id ? String(a.team_id) : null, age: (typeof a.age === 'number' ? a.age : null), gender: (a as any).gender ?? null })));
 
-        // Entries for season-to-date up to asOf (yesterday local)
+        // Entries for season-to-date up to asOf (yesterday local) - APPROVED only for points/RR
         // Query per team to avoid Supabase 1000-row default limit
         const allEntries: Array<{ user_id: string; team_id: string | null; type: string; rr_value: number | null; workout_type: string | null; duration: number | null; distance: number | null; steps: number | null; date: string }> = [];
         for (const team of teamList) {
@@ -328,20 +328,41 @@ export default function GovernorPage() {
         }
         const all = allEntries;
         setEntriesForAggregates(all);
-        // Build rest-day counts per user for season to date through asOf
+        
+        // Build rest-day counts per user for season to date through asOf (approved only)
         const restMap: Record<string, number> = {};
-        const datesByUser: Record<string, Set<string>> = {};
         for (const e of all) {
           if (String(e.type) === 'rest') {
             const uid = String(e.user_id);
             restMap[uid] = (restMap[uid] || 0) + 1;
           }
-          const uid2 = String(e.user_id);
-          const ds = String(e.date);
-          if (!datesByUser[uid2]) datesByUser[uid2] = new Set<string>();
-          datesByUser[uid2].add(ds);
         }
         setRestDaysByUser(restMap);
+        
+        // Fetch ALL entries (any status) for missed days calculation
+        // A day is only "missed" if there's NO entry at all (not even rejected/pending)
+        const allEntriesAnyStatus: Array<{ user_id: string; date: string }> = [];
+        for (const team of teamList) {
+          const { data: teamEntsAny } = await getSupabase()
+            .from('entries')
+            .select('user_id,date')
+            .eq('team_id', String(team.id))
+            .gte('date', SEASON_START)
+            .lte('date', asOf);
+          if (teamEntsAny) {
+            allEntriesAnyStatus.push(...(teamEntsAny as any[]));
+          }
+        }
+        
+        // Build datesByUser from ALL entries (any status)
+        const datesByUser: Record<string, Set<string>> = {};
+        for (const e of allEntriesAnyStatus) {
+          const uid = String(e.user_id);
+          const ds = String(e.date);
+          if (!datesByUser[uid]) datesByUser[uid] = new Set<string>();
+          datesByUser[uid].add(ds);
+        }
+        
         // Compute missed days per user = total days since season start through asOf minus unique entry days
         const start = parseYmdLocal(SEASON_START);
         const end = parseYmdLocal(asOf);

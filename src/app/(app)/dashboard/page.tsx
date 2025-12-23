@@ -411,7 +411,7 @@ export default function DashboardPage() {
       const seasonStartStr = SEASON_START_LOCAL_STR;
       const todayLocalStr = formatLocalYYYYMMDD(today);
 
-      // Fetch all my approved entries for the season
+      // Fetch all my approved entries for the season (for points/RR calculation)
       const { data: myEntries } = await getSupabase()
         .from('entries')
         .select('type, rr_value, date')
@@ -428,13 +428,23 @@ export default function DashboardPage() {
       const avgRR = rrVals.length ? Math.round((rrVals.reduce((a,b)=>a+b,0)/rrVals.length)*100)/100 : null;
       const restUsed = entries.filter(e => String(e.type) === 'rest').length;
 
-      // Calculate missed days (days from season start through yesterday with no entry).
-      const byDate = new Set(entries.map(e => String(e.date)));
+      // Fetch ALL my entries (any status) for missed days calculation
+      // A day is only "missed" if there's NO entry at all (not even rejected/pending)
+      const { data: allMyEntries } = await getSupabase()
+        .from('entries')
+        .select('date')
+        .eq('user_id', userId)
+        .gte('date', seasonStartStr)
+        .lte('date', todayLocalStr);
+
+      const allEntriesDates = new Set((allMyEntries || []).map(e => String(e.date)));
+      
+      // Calculate missed days (days from season start through yesterday with no entry at all)
       let missed = 0;
       let cur = new Date(seasonStart);
       while (cur.getTime() <= yesterdayCutoff.getTime()) {
         const ds = formatLocalYYYYMMDD(new Date(cur));
-        if (!byDate.has(ds)) missed += 1;
+        if (!allEntriesDates.has(ds)) missed += 1;
         cur = new Date(cur.getTime() + 24 * 3600 * 1000);
       }
 
@@ -473,7 +483,7 @@ export default function DashboardPage() {
         .eq('team_id', effectiveTeamId);
       const memberIds = ((teamUsers || []) as Array<{ id: string }>).map((u)=> String(u.id));
       
-      // Fetch all approved entries for the team for the season
+      // Fetch all approved entries for the team for the season (for points/RR calculation)
       const { data } = await getSupabase()
         .from('entries')
         .select('id, user_id, date, type, rr_value')
@@ -488,9 +498,18 @@ export default function DashboardPage() {
       // Team rest days (approved)
       const restUsed = entries.filter(e => String(e.type) === 'rest').length;
       
-      // Team missed days: per member per day with no entry from season start through yesterday
+      // Fetch ALL team entries (any status) for missed days calculation
+      // A day is only "missed" if there's NO entry at all (not even rejected/pending)
+      const { data: allTeamEntries } = await getSupabase()
+        .from('entries')
+        .select('user_id, date')
+        .eq('team_id', effectiveTeamId)
+        .gte('date', seasonStartStr)
+        .lte('date', todayLocalStr);
+      
+      // Team missed days: per member per day with no entry at all from season start through yesterday
       const memberSet = new Set(memberIds);
-      const byDateUser = new Set(entries.map(e => `${String(e.date)}|${String(e.user_id)}`));
+      const byDateUser = new Set((allTeamEntries || []).map(e => `${String(e.date)}|${String(e.user_id)}`));
       let missed = 0;
       {
         let day = new Date(seasonStart);

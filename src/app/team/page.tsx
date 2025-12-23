@@ -182,7 +182,7 @@ export default function TeamPage() {
       .eq('team_id', currentTeamId);
     const memberIds = (teamUsers || []).map((u: { id: string }) => String(u.id));
 
-    // Fetch approved entries for team with date filter
+    // Fetch approved entries for team with date filter (for rest days count)
     let query = getSupabase()
       .from('entries')
       .select('user_id, type, date')
@@ -195,13 +195,26 @@ export default function TeamPage() {
     
     const { data: entries } = await query;
 
-    // Calculate rest days
+    // Calculate rest days (approved only)
     const restDays = (entries || []).filter((e: { type: string }) => e.type === 'rest').length;
     setTeamRestDays(restDays);
 
-    // Calculate missed days
+    // Fetch ALL entries (any status) for missed days calculation
+    // A day is only "missed" if there's NO entry at all (not even rejected/pending)
+    let allEntriesQuery = getSupabase()
+      .from('entries')
+      .select('user_id, date')
+      .eq('team_id', currentTeamId);
+    
+    if (startDate && endDate) {
+      allEntriesQuery = allEntriesQuery.gte('date', startDate).lte('date', endDate);
+    }
+    
+    const { data: allEntries } = await allEntriesQuery;
+
+    // Calculate missed days using ALL entries (any status)
     const memberSet = new Set(memberIds);
-    const byDateUser = new Set((entries || []).map((e: { date: string; user_id: string }) => `${String(e.date)}|${String(e.user_id)}`));
+    const byDateUser = new Set((allEntries || []).map((e: { date: string; user_id: string }) => `${String(e.date)}|${String(e.user_id)}`));
     
     let missed = 0;
     let cur: Date;
@@ -324,9 +337,22 @@ export default function TeamPage() {
       }
     });
 
-    // Missed days calculation based on time period
+    // Fetch ALL entries (any status) for missed days calculation
+    // A day is only "missed" if there's NO entry at all (not even rejected/pending)
+    let allEntriesQuery = getSupabase()
+      .from('entries')
+      .select('user_id, date')
+      .eq('team_id', currentTeamId);
+    
+    if (startDate && endDate) {
+      allEntriesQuery = allEntriesQuery.gte('date', startDate).lte('date', endDate);
+    }
+    
+    const { data: allEntriesForMissed } = await allEntriesQuery;
+
+    // Missed days calculation based on time period (using ALL entries, any status)
     const datesByUser = new Map<string, Set<string>>();
-    (entries || []).forEach((e: any) => {
+    (allEntriesForMissed || []).forEach((e: any) => {
       const ds = String(e.date);
       const uid = String(e.user_id);
       const set = datesByUser.get(uid) || new Set<string>();
