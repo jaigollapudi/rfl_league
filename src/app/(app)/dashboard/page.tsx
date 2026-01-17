@@ -192,6 +192,7 @@ export default function DashboardPage() {
   const [myAvgRR, setMyAvgRR] = useState<number | null>(null);
   const [myMissedDays, setMyMissedDays] = useState<number>(0);
   const [myRestUsed, setMyRestUsed] = useState<number>(0);
+  const [myRestAllowance, setMyRestAllowance] = useState<number>(18);
   const [showAudioPopup, setShowAudioPopup] = useState(false);
   const [viewWeekStart, setViewWeekStart] = useState<Date>(() => {
     // Initialize to current week (the week containing today)
@@ -335,19 +336,23 @@ export default function DashboardPage() {
     fetchActivity(viewWeekStart);
     (async () => {
       if (!userId) return;
-      // Fetch user's team id, age and name
+      // Fetch user's team id, age, name and rest day allowance
       const { data: acct } = await getSupabase()
         .from('accounts')
-        .select('team_id, age, teams(name)')
+        .select('team_id, age, rest_day_allowance, teams(name)')
         .eq('id', userId)
         .maybeSingle();
-      type Acct = { team_id: string | null; age: number | null; teams?: { name?: string } | null } | null;
+      type Acct = { team_id: string | null; age: number | null; rest_day_allowance: number | null; teams?: { name?: string } | null } | null;
       const tId = (acct as Acct)?.team_id || null;
       const tName = (acct as Acct)?.teams?.name || "";
       setTeamId(tId);
       setTeamName(tName || "");
       const ageVal = (acct as Acct)?.age ?? null;
       setIsSenior(typeof ageVal === 'number' && ageVal >= 65);
+      // Set rest day allowance (default 18 if not set)
+      const fetchedAllowance = (acct as Acct)?.rest_day_allowance;
+      console.log('DEBUG: rest_day_allowance from DB:', fetchedAllowance, 'full acct:', acct);
+      setMyRestAllowance(fetchedAllowance ?? 18);
 
       // Fetch rest day count
       const { count } = await getSupabase()
@@ -507,22 +512,47 @@ export default function DashboardPage() {
         .gte('date', seasonStartStr)
         .lte('date', todayLocalStr);
       
-      // Team missed days: per member per day with no entry at all from season start through yesterday
+      // FIXED: Team missed days calculation - only count when rest days are exhausted per member
       const memberSet = new Set(memberIds);
       const byDateUser = new Set((allTeamEntries || []).map(e => `${String(e.date)}|${String(e.user_id)}`));
-      let missed = 0;
+      
+      // Count rest days per user from approved entries
+      const restDaysByUser = new Map<string, number>();
+      entries.forEach((e) => {
+        if (String(e.type) === 'rest') {
+          const uid = String(e.user_id);
+          restDaysByUser.set(uid, (restDaysByUser.get(uid) || 0) + 1);
+        }
+      });
+      
+      // Count days without entry per user
+      const daysWithoutEntryByUser = new Map<string, number>();
       {
         let day = new Date(seasonStart);
         while (day.getTime() <= yesterdayCutoff2.getTime()) {
           const ds = formatLocalYYYYMMDD(new Date(day));
-          memberSet.forEach((uid)=>{ if (!byDateUser.has(`${ds}|${uid}`)) missed += 1; });
+          memberSet.forEach((uid) => { 
+            if (!byDateUser.has(`${ds}|${uid}`)) {
+              daysWithoutEntryByUser.set(uid, (daysWithoutEntryByUser.get(uid) || 0) + 1);
+            }
+          });
           day = new Date(day.getTime() + 24 * 3600 * 1000);
         }
       }
+      
+      // Calculate actual missed days: only count when rest days are exhausted
+      let totalMissed = 0;
+      memberSet.forEach((uid) => {
+        const daysWithoutEntry = daysWithoutEntryByUser.get(uid) || 0;
+        const userRestUsed = restDaysByUser.get(uid) || 0;
+        const restDaysRemaining = Math.max(0, 18 - userRestUsed);
+        totalMissed += Math.max(0, daysWithoutEntry - restDaysRemaining);
+      });
+      
       setTeamPoints(teamPts);
       setTeamAvgRR(teamRR);
       setTeamRestWeek(restUsed);
-      setTeamMissedWeek(missed);
+      setTeamMissedWeek(totalMissed);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId, userId]);
@@ -740,7 +770,7 @@ export default function DashboardPage() {
                   </div>
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Rest Days Unused</div>
-                  <div className="text-lg font-bold text-rfl-navy">{Math.max(0, 18 - myRestUsed)}</div>
+                  <div className="text-lg font-bold text-rfl-navy">{Math.max(0, myRestAllowance - myRestUsed)}</div>
                 </div>
                 <div className="p-3 bg-rfl-peach/50 rounded">
                   <div className="text-xs text-gray-600">Days Missed</div>
@@ -1052,8 +1082,8 @@ export default function DashboardPage() {
               <button onClick={() => setOpenRest(false)} className="text-gray-500">✕</button>
             </div>
             <div className="space-y-3">
-              <div className="text-sm text-rfl-navy font-semibold">You are taking a rest day. You have {Math.max(0, 18 - myRestUsed)} / 18 rest days left.</div>
-              <div className="text-sm text-gray-700">Rest days remaining: <span className="font-semibold">{Math.max(0, 18 - myRestUsed)}</span> / 18</div>
+              <div className="text-sm text-rfl-navy font-semibold">You are taking a rest day. You have {Math.max(0, myRestAllowance - myRestUsed)} / {myRestAllowance} rest days left.</div>
+              <div className="text-sm text-gray-700">Rest days remaining: <span className="font-semibold">{Math.max(0, myRestAllowance - myRestUsed)}</span> / {myRestAllowance}</div>
               <label className="block text-sm font-medium text-gray-700">Workout Date</label>
               <select value={date} onChange={(e)=> setDate(e.target.value)} className="w-full border rounded-md px-3 py-2 bg-white">
                 {(() => {

@@ -212,11 +212,19 @@ export default function TeamPage() {
     
     const { data: allEntries } = await allEntriesQuery;
 
-    // Calculate missed days using ALL entries (any status)
+    // FIXED: Calculate missed days - only count when rest days are exhausted per member
     const memberSet = new Set(memberIds);
     const byDateUser = new Set((allEntries || []).map((e: { date: string; user_id: string }) => `${String(e.date)}|${String(e.user_id)}`));
     
-    let missed = 0;
+    // Count rest days per user from approved entries
+    const restDaysByUser = new Map<string, number>();
+    (entries || []).forEach((e: { user_id: string; type: string }) => {
+      if (e.type === 'rest') {
+        const uid = String(e.user_id);
+        restDaysByUser.set(uid, (restDaysByUser.get(uid) || 0) + 1);
+      }
+    });
+    
     let cur: Date;
     let endDateCalc: Date;
     
@@ -237,15 +245,28 @@ export default function TeamPage() {
       endDateCalc = weekEnd.getTime() >= todayUtc.getTime() ? yesterdayUtc : weekEnd;
     }
     
+    // Count days without entry per user
+    const daysWithoutEntryByUser = new Map<string, number>();
     while (cur.getTime() <= endDateCalc.getTime()) {
       const ds = cur.toISOString().split('T')[0];
       memberSet.forEach((uid) => { 
-        if (!byDateUser.has(`${ds}|${uid}`)) missed += 1; 
+        if (!byDateUser.has(`${ds}|${uid}`)) {
+          daysWithoutEntryByUser.set(uid, (daysWithoutEntryByUser.get(uid) || 0) + 1);
+        }
       });
       cur = new Date(cur.getTime() + 24 * 3600 * 1000);
     }
     
-    setTeamMissedDays(missed);
+    // Calculate actual missed days: only count when rest days are exhausted
+    let totalMissed = 0;
+    memberSet.forEach((uid) => {
+      const daysWithoutEntry = daysWithoutEntryByUser.get(uid) || 0;
+      const userRestUsed = restDaysByUser.get(uid) || 0;
+      const restDaysRemaining = Math.max(0, 18 - userRestUsed);
+      totalMissed += Math.max(0, daysWithoutEntry - restDaysRemaining);
+    });
+    
+    setTeamMissedDays(totalMissed);
   }
 
   // Close dropdown when clicking outside
@@ -361,7 +382,7 @@ export default function TeamPage() {
     });
     
     memberMap.forEach((row, uid) => {
-      let missed = 0;
+      let daysWithoutEntry = 0;
       let cur: Date;
       let endDate: Date;
       
@@ -384,10 +405,14 @@ export default function TeamPage() {
       const set = datesByUser.get(uid) || new Set<string>();
       while (cur.getTime() <= endDate.getTime()) {
         const ds = new Date(cur).toISOString().split('T')[0];
-        if (!set.has(ds)) missed += 1;
+        if (!set.has(ds)) daysWithoutEntry += 1;
         cur = new Date(cur.getTime() + 24 * 3600 * 1000);
       }
-      row.missed_days = missed;
+      // FIXED: A missed day only counts when rest days are exhausted
+      // missed_days = max(0, days_without_entry - rest_days_remaining)
+      const restDaysUsed = row.rest_used || 0;
+      const restDaysRemaining = Math.max(0, 18 - restDaysUsed);
+      row.missed_days = Math.max(0, daysWithoutEntry - restDaysRemaining);
     });
 
     const sortedMembers = Array.from(memberMap.values()).sort((a,b)=> (b.approved_points||0)-(a.approved_points||0) || ((b.avg_rr||0)-(a.avg_rr||0)) );

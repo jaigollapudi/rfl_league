@@ -363,14 +363,18 @@ export default function GovernorPage() {
           datesByUser[uid].add(ds);
         }
         
-        // Compute missed days per user = total days since season start through asOf minus unique entry days
+        // FIXED: Compute missed days per user - only count when rest days are exhausted
+        // missed_days = max(0, days_without_entry - rest_days_remaining)
         const start = parseYmdLocal(SEASON_START);
         const end = parseYmdLocal(asOf);
         const totalDays = Math.floor((end.getTime() - start.getTime()) / (24*3600*1000)) + 1;
         const missedMap: Record<string, number> = {};
         Object.entries(datesByUser).forEach(([uid, set]) => {
-          const done = (set as Set<string>).size;
-          missedMap[uid] = Math.max(totalDays - done, 0);
+          const daysWithEntry = (set as Set<string>).size;
+          const daysWithoutEntry = Math.max(totalDays - daysWithEntry, 0);
+          const restDaysUsed = restMap[uid] || 0;
+          const restDaysRemaining = Math.max(0, 18 - restDaysUsed);
+          missedMap[uid] = Math.max(0, daysWithoutEntry - restDaysRemaining);
         });
         setMissedDaysByUser(missedMap);
 
