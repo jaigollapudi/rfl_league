@@ -317,23 +317,34 @@ export default function LeaderboardsPage() {
         for (const team of teams) {
           const tid = String(team.id);
 
-          const { data: entries } = await getSupabase()
-            .from('entries')
-            .select('type, rr_value, date')
-            .eq('team_id', tid)
-            .eq('status', 'approved')
-            .gte('date', ymdLocal(s))
-            .lte('date', ymdLocal(e));
+          // Paginate to bypass Supabase's 1000-row server limit
+          let allEntries: any[] = [];
+          let offset = 0;
+          const batchSize = 1000;
+          while (true) {
+            const { data: batch } = await getSupabase()
+              .from('entries')
+              .select('type, rr_value, date')
+              .eq('team_id', tid)
+              .eq('status', 'approved')
+              .gte('date', ymdLocal(s))
+              .lte('date', ymdLocal(e))
+              .range(offset, offset + batchSize - 1);
+            
+            if (!batch || batch.length === 0) break;
+            allEntries = allEntries.concat(batch);
+            if (batch.length < batchSize) break;
+            offset += batchSize;
+          }
 
-          const ents = entries || [];
+          const ents = allEntries;
           let pts = 0, rrSum = 0, rrCnt = 0;
 
           ents.forEach(e2 => {
             const rr = Number(e2.rr_value || 0);
-            const isRest = e2.type === "rest";
 
-            if (isRest && rr > 0) pts += 1;
-            else if (!isRest) pts += 1;
+            // Every approved entry counts as 1 point
+            pts += 1;
 
             if (rr > 0) {
               rrSum += rr;
@@ -415,23 +426,11 @@ export default function LeaderboardsPage() {
         const todayEnts = todayEntries || [];
         const yesterdayEnts = yesterdayEntries || [];
 
-        // Calculate today's points
-        let todayPts = 0;
-        todayEnts.forEach(e => {
-          const rr = Number(e.rr_value || 0);
-          const isRest = e.type === "rest";
-          if (isRest && rr > 0) todayPts += 1;
-          else if (!isRest) todayPts += 1;
-        });
+        // Calculate today's points - every approved entry counts as 1 point
+        let todayPts = todayEnts.length;
 
-        // Calculate yesterday's points
-        let yesterdayPts = 0;
-        yesterdayEnts.forEach(e => {
-          const rr = Number(e.rr_value || 0);
-          const isRest = e.type === "rest";
-          if (isRest && rr > 0) yesterdayPts += 1;
-          else if (!isRest) yesterdayPts += 1;
-        });
+        // Calculate yesterday's points - every approved entry counts as 1 point
+        let yesterdayPts = yesterdayEnts.length;
 
         // Apply roster factor
         const factor = getRosterFactor(String(team.name));
