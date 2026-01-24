@@ -5,16 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { getSupabase } from "@/lib/supabase";
-import { ChevronDown } from "lucide-react";
-
-type MemberRow = {
-  user_id: string;
-  name: string;
-  approved_points: number;
-  avg_rr: number | null;
-  rest_used?: number;
-  missed_days?: number;
-};
+import { getTeamSummary, getTeamMembers, type StaticTeamSummary, type StaticMemberData } from "@/lib/static-team-data";
 
 type PendingEntry = {
   id: string;
@@ -38,40 +29,11 @@ function formatLocalDateLabel(yyyyMmDd: string): string {
   return dt.toDateString();
 }
 
-function startOfWeekMondayLocal(d: Date): Date {
-  const day = (d.getDay() + 6) % 7; // 0 = Monday
-  const copy = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  copy.setDate(copy.getDate() - day);
-  copy.setHours(0,0,0,0);
-  return copy;
-}
-
 function ymd(d: Date): string {
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
-}
-
-// League date functions (fixed season: Oct 25, 2025 → Jan 23, 2026)
-function firstWeekStart(_year: number): Date {
-  return new Date(Date.UTC(2025, 9, 25)); // Oct 25, 2025
-}
-
-function seasonEndStart(_year: number): Date {
-  return new Date(Date.UTC(2026, 0, 23)); // Jan 23, 2026
-}
-
-function addDaysUTC(d: Date, days: number): Date {
-  const copy = new Date(d.getTime());
-  copy.setUTCDate(copy.getUTCDate() + days);
-  return copy;
-}
-
-function getWeekNumber(seasonStart: Date, date: Date): number {
-  const diffTime = date.getTime() - seasonStart.getTime();
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-  return Math.floor(diffDays / 7) + 1;
 }
 
 export default function TeamPage() {
@@ -84,65 +46,18 @@ export default function TeamPage() {
       router.replace('/governor');
     }
   }, [role, router]);
+
   const userId = session?.user?.id;
   const [teamId, setTeamId] = useState<string | null>(null);
-  const [members, setMembers] = useState<MemberRow[]>([]);
+  const [teamSummary, setTeamSummary] = useState<StaticTeamSummary | null>(null);
+  const [members, setMembers] = useState<StaticMemberData[]>([]);
   const [pending, setPending] = useState<PendingEntry[]>([]);
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [page, setPage] = useState<number>(1);
   const pageSize = 10;
   const [previewEntry, setPreviewEntry] = useState<PendingEntry | null>(null);
-  const [selectedPeriod, setSelectedPeriod] = useState<string>(() => {
-    // Default to current week instead of "overall"
-    const seasonStart = firstWeekStart(0);
-    const today = new Date();
-    
-    // If before season start, default to overall
-    if (today.getTime() < seasonStart.getTime()) return "overall";
-    
-    // Calculate which week we're in
-    const daysSinceStart = Math.floor((today.getTime() - seasonStart.getTime()) / (24 * 3600 * 1000));
-    const weekNum = Math.floor(daysSinceStart / 7) + 1;
-    return `week-${weekNum}`;
-  });
-  const [dropdownOpen, setDropdownOpen] = useState<boolean>(false);
-  const [teamMissedDays, setTeamMissedDays] = useState<number>(0);
-  const [teamRestDays, setTeamRestDays] = useState<number>(0);
 
-  // Generate dropdown options based on league dates
-  const dropdownOptions = useMemo(() => {
-    const seasonStart = firstWeekStart(0);
-    const seasonEnd = seasonEndStart(0);
-    const today = new Date();
-    
-    const options = [{ value: "overall", label: "Season Total" }];
-    
-    // Add weeks that are completed or currently in progress
-    let weekStart = new Date(seasonStart);
-    let weekNum = 1;
-    
-    while (weekStart.getTime() <= Math.min(seasonEnd.getTime(), today.getTime())) {
-      const weekEnd = addDaysUTC(weekStart, 6);
-      const weekEndDate = new Date(Math.min(weekEnd.getTime(), today.getTime()));
-      
-      // Include week if it has started (even if not fully completed)
-      if (weekStart.getTime() <= today.getTime()) {
-        const startStr = weekStart.toISOString().split('T')[0];
-        const endStr = weekEndDate.toISOString().split('T')[0];
-        options.push({
-          value: `week-${weekNum}`,
-          label: `Week ${weekNum}`
-        });
-      }
-      
-      weekStart = addDaysUTC(weekStart, 7);
-      weekNum++;
-    }
-    
-    return options;
-  }, []);
-
-  // discover the user's team
+  // Discover the user's team
   useEffect(() => {
     if (!userId) return;
     (async () => {
@@ -151,283 +66,30 @@ export default function TeamPage() {
     })();
   }, [userId]);
 
-  // Reload members data when time period changes
+  // Load static data when teamId is available
   useEffect(() => {
-    if (teamId) {
-      loadMembersSummary(teamId, selectedPeriod);
-      loadTeamSummary(teamId, selectedPeriod);
-    }
-  }, [teamId, selectedPeriod]);
-
-  async function loadTeamSummary(currentTeamId: string, timePeriod: string = "overall") {
-    // Determine date range based on time period
-    let startDate: string | null = null;
-    let endDate: string | null = null;
+    if (!teamId) return;
     
-    if (timePeriod !== "overall") {
-      const currentYear = new Date().getUTCFullYear();
-      const seasonStart = firstWeekStart(currentYear);
-      const weekNum = parseInt(timePeriod.split('-')[1]);
-      const weekStart = addDaysUTC(seasonStart, (weekNum - 1) * 7);
-      const weekEnd = addDaysUTC(weekStart, 6);
-      
-      startDate = weekStart.toISOString().split('T')[0];
-      endDate = weekEnd.toISOString().split('T')[0];
-    }
-
-    // Fetch team members
-    const { data: teamUsers } = await getSupabase()
-      .from('accounts')
-      .select('id')
-      .eq('team_id', currentTeamId);
-    const memberIds = (teamUsers || []).map((u: { id: string }) => String(u.id));
-
-    // Fetch approved entries for team with date filter (for rest days count)
-    let query = getSupabase()
-      .from('entries')
-      .select('user_id, type, date')
-      .eq('team_id', currentTeamId)
-      .eq('status', 'approved');
+    // Load static team summary
+    const summary = getTeamSummary(teamId);
+    setTeamSummary(summary || null);
     
-    if (startDate && endDate) {
-      query = query.gte('date', startDate).lte('date', endDate);
-    }
-    
-    const { data: entries } = await query;
+    // Load static members
+    const teamMembers = getTeamMembers(teamId);
+    setMembers(teamMembers);
+  }, [teamId]);
 
-    // Calculate rest days (approved only)
-    const restDays = (entries || []).filter((e: { type: string }) => e.type === 'rest').length;
-    setTeamRestDays(restDays);
-
-    // Fetch ALL entries (any status) for missed days calculation
-    // A day is only "missed" if there's NO entry at all (not even rejected/pending)
-    let allEntriesQuery = getSupabase()
-      .from('entries')
-      .select('user_id, date')
-      .eq('team_id', currentTeamId);
-    
-    if (startDate && endDate) {
-      allEntriesQuery = allEntriesQuery.gte('date', startDate).lte('date', endDate);
-    }
-    
-    const { data: allEntries } = await allEntriesQuery;
-
-    // FIXED: Calculate missed days - only count when rest days are exhausted per member
-    const memberSet = new Set(memberIds);
-    const byDateUser = new Set((allEntries || []).map((e: { date: string; user_id: string }) => `${String(e.date)}|${String(e.user_id)}`));
-    
-    // Count rest days per user from approved entries
-    const restDaysByUser = new Map<string, number>();
-    (entries || []).forEach((e: { user_id: string; type: string }) => {
-      if (e.type === 'rest') {
-        const uid = String(e.user_id);
-        restDaysByUser.set(uid, (restDaysByUser.get(uid) || 0) + 1);
-      }
-    });
-    
-    let cur: Date;
-    let endDateCalc: Date;
-    
-    if (timePeriod === "overall") {
-      // Overall: from fixed season start through yesterday (do not count today)
-      cur = firstWeekStart(0);
-      const todayUtc = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-      endDateCalc = new Date(todayUtc.getTime() - 24 * 3600 * 1000);
-    } else {
-      // Weekly: from week start to week end (or today if current week)
-      const seasonStart = firstWeekStart(0);
-      const weekNum = parseInt(timePeriod.split('-')[1]);
-      cur = addDaysUTC(seasonStart, (weekNum - 1) * 7);
-      const weekEnd = addDaysUTC(cur, 6);
-      const todayUtc = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-      const yesterdayUtc = new Date(todayUtc.getTime() - 24 * 3600 * 1000);
-      // If current week is ongoing, stop at yesterday; otherwise use week end
-      endDateCalc = weekEnd.getTime() >= todayUtc.getTime() ? yesterdayUtc : weekEnd;
-    }
-    
-    // Count days without entry per user
-    const daysWithoutEntryByUser = new Map<string, number>();
-    while (cur.getTime() <= endDateCalc.getTime()) {
-      const ds = cur.toISOString().split('T')[0];
-      memberSet.forEach((uid) => { 
-        if (!byDateUser.has(`${ds}|${uid}`)) {
-          daysWithoutEntryByUser.set(uid, (daysWithoutEntryByUser.get(uid) || 0) + 1);
-        }
-      });
-      cur = new Date(cur.getTime() + 24 * 3600 * 1000);
-    }
-    
-    // Calculate actual missed days: only count when rest days are exhausted
-    let totalMissed = 0;
-    memberSet.forEach((uid) => {
-      const daysWithoutEntry = daysWithoutEntryByUser.get(uid) || 0;
-      const userRestUsed = restDaysByUser.get(uid) || 0;
-      const restDaysRemaining = Math.max(0, 18 - userRestUsed);
-      totalMissed += Math.max(0, daysWithoutEntry - restDaysRemaining);
-    });
-    
-    setTeamMissedDays(totalMissed);
-  }
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownOpen) {
-        const target = event.target as Element;
-        if (!target.closest('.dropdown-container')) {
-          setDropdownOpen(false);
-        }
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [dropdownOpen]);
-
-  async function loadMembersSummary(currentTeamId: string, timePeriod: string = "overall") {
-    // Fetch team members
-    const { data: teamUsers } = await getSupabase()
-      .from('accounts')
-      .select('id, first_name')
-      .eq('team_id', currentTeamId);
-    const memberMap = new Map<string, MemberRow>();
-    (teamUsers || []).forEach((u: { id: string; first_name: string }) => {
-      memberMap.set(String(u.id), {
-        user_id: String(u.id),
-        name: String(u.first_name || ''),
-        approved_points: 0,
-        avg_rr: null,
-        rest_used: 0,
-        missed_days: 0,
-      });
-    });
-
-    // Determine date range based on time period
-    let startDate: string | null = null;
-    let endDate: string | null = null;
-    
-    if (timePeriod !== "overall") {
-      const currentYear = new Date().getUTCFullYear();
-      const seasonStart = firstWeekStart(currentYear);
-      const weekNum = parseInt(timePeriod.split('-')[1]);
-      const weekStart = addDaysUTC(seasonStart, (weekNum - 1) * 7);
-      const weekEnd = addDaysUTC(weekStart, 6);
-      
-      startDate = weekStart.toISOString().split('T')[0];
-      endDate = weekEnd.toISOString().split('T')[0];
-    }
-
-    // Fetch approved entries for team with date filter
-    let query = getSupabase()
-      .from('entries')
-      .select('user_id, rr_value, type, date')
-      .eq('team_id', currentTeamId)
-      .eq('status', 'approved');
-    
-    if (startDate && endDate) {
-      query = query.gte('date', startDate).lte('date', endDate);
-    }
-    
-    const { data: entries } = await query;
-
-    const rrAgg = new Map<string, { sum: number; count: number }>();
-    (entries || []).forEach((e: { user_id: string; rr_value: number | null; type: string }) => {
-      const uid = String(e.user_id);
-      const row = memberMap.get(uid);
-      if (row) {
-        const rrNum = typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0);
-        const isRest = e.type === 'rest';
-        row.approved_points += isRest ? (rrNum > 0 ? 1 : 0) : 1;
-        if (isRest) row.rest_used = (row.rest_used || 0) + 1;
-        if (rrNum > 0) {
-          const agg = rrAgg.get(uid) || { sum: 0, count: 0 };
-          agg.sum += rrNum;
-          agg.count += 1;
-          rrAgg.set(uid, agg);
-        }
-      }
-    });
-
-    // finalize avg rr
-    rrAgg.forEach((agg, uid) => {
-      const row = memberMap.get(uid);
-      if (row) {
-        row.avg_rr = Math.round((agg.sum / Math.max(1, agg.count)) * 100) / 100;
-      }
-    });
-
-    // Fetch ALL entries (any status) for missed days calculation
-    // A day is only "missed" if there's NO entry at all (not even rejected/pending)
-    let allEntriesQuery = getSupabase()
-      .from('entries')
-      .select('user_id, date')
-      .eq('team_id', currentTeamId);
-    
-    if (startDate && endDate) {
-      allEntriesQuery = allEntriesQuery.gte('date', startDate).lte('date', endDate);
-    }
-    
-    const { data: allEntriesForMissed } = await allEntriesQuery;
-
-    // Missed days calculation based on time period (using ALL entries, any status)
-    const datesByUser = new Map<string, Set<string>>();
-    (allEntriesForMissed || []).forEach((e: any) => {
-      const ds = String(e.date);
-      const uid = String(e.user_id);
-      const set = datesByUser.get(uid) || new Set<string>();
-      set.add(ds);
-      datesByUser.set(uid, set);
-    });
-    
-    memberMap.forEach((row, uid) => {
-      let daysWithoutEntry = 0;
-      let cur: Date;
-      let endDate: Date;
-      
-      if (timePeriod === "overall") {
-        // Overall: from fixed season start through yesterday (do not count today)
-        cur = firstWeekStart(0);
-        const todayUtc = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-        endDate = new Date(todayUtc.getTime() - 24 * 3600 * 1000);
-      } else {
-        // Weekly: from week start to week end (or today if current week)
-        const seasonStart = firstWeekStart(0);
-        const weekNum = parseInt(timePeriod.split('-')[1]);
-        cur = addDaysUTC(seasonStart, (weekNum - 1) * 7);
-        const weekEnd = addDaysUTC(cur, 6);
-        const todayUtc = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-        const yesterdayUtc = new Date(todayUtc.getTime() - 24 * 3600 * 1000);
-        endDate = weekEnd.getTime() >= todayUtc.getTime() ? yesterdayUtc : weekEnd;
-      }
-      
-      const set = datesByUser.get(uid) || new Set<string>();
-      while (cur.getTime() <= endDate.getTime()) {
-        const ds = new Date(cur).toISOString().split('T')[0];
-        if (!set.has(ds)) daysWithoutEntry += 1;
-        cur = new Date(cur.getTime() + 24 * 3600 * 1000);
-      }
-      // FIXED: A missed day only counts when rest days are exhausted
-      // missed_days = max(0, days_without_entry - rest_days_remaining)
-      const restDaysUsed = row.rest_used || 0;
-      const restDaysRemaining = Math.max(0, 18 - restDaysUsed);
-      row.missed_days = Math.max(0, daysWithoutEntry - restDaysRemaining);
-    });
-
-    const sortedMembers = Array.from(memberMap.values()).sort((a,b)=> (b.approved_points||0)-(a.approved_points||0) || ((b.avg_rr||0)-(a.avg_rr||0)) );
-    setMembers(sortedMembers);
-  }
-
+  // Load pending entries for leaders (still dynamic)
   async function loadPending(currentTeamId: string, pageNum: number) {
     const from = (pageNum - 1) * pageSize;
     const to = from + pageSize - 1;
     // Only show entries from today and yesterday
     const today = new Date();
     const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-    const startStr = ymd(yesterday); // inclusive
-    const endStr = ymd(today);       // inclusive
-    // total count
+    const startStr = ymd(yesterday);
+    const endStr = ymd(today);
+    
+    // Total count
     const { count } = await getSupabase()
       .from('entries')
       .select('id', { count: 'exact', head: true })
@@ -437,7 +99,7 @@ export default function TeamPage() {
       .lte('date', endStr);
     setPendingCount(count || 0);
 
-    // page data
+    // Page data
     const { data: pend } = await getSupabase()
       .from('entries')
       .select('id,user_id,date,type,workout_type,duration,distance,steps,holes,rr_value,status,proof_url,accounts!inner(first_name)')
@@ -456,19 +118,22 @@ export default function TeamPage() {
 
   useEffect(() => {
     if (!teamId) return;
-    (async () => {
-      await loadMembersSummary(teamId);
-      await loadPending(teamId, page);
-    })();
+    loadPending(teamId, page);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId, page]);
 
+  // Calculate totals from static data
   const totals = useMemo(() => {
-    const pts = members.reduce((a, m) => a + (m.approved_points || 0), 0);
-    const rrVals = members.map(m => m.avg_rr).filter((v): v is number => typeof v === 'number');
-    const rr = rrVals.length ? (rrVals.reduce((a,b)=>a+b,0)/rrVals.length) : 0;
-    return { pts, rr: Number((Math.round(rr * 100) / 100).toFixed(2)) };
-  }, [members]);
+    if (teamSummary) {
+      return {
+        pts: Math.ceil(teamSummary.scaled_team_points), // Use scaled points, rounded up
+        rr: teamSummary.team_avg_rr,
+        missed: teamSummary.total_missed_days,
+        rest: teamSummary.total_rest_days,
+      };
+    }
+    return { pts: 0, rr: 0, missed: 0, rest: 0 };
+  }, [teamSummary]);
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -481,7 +146,7 @@ export default function TeamPage() {
       <Card className="bg-white shadow-md mb-6">
         <CardHeader>
           <CardTitle className="text-xl text-rfl-navy">Team Summary</CardTitle>
-          <CardDescription>Quick overview</CardDescription>
+          <CardDescription>{teamSummary?.team_name || 'Loading...'} • Season Total</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 gap-3 text-center">
@@ -495,11 +160,11 @@ export default function TeamPage() {
             </div>
             <div className="p-3 bg-rfl-peach/50 rounded">
               <div className="text-xs text-gray-600">Days Missed</div>
-              <div className="text-lg font-bold text-rfl-navy">{teamMissedDays}</div>
+              <div className="text-lg font-bold text-rfl-navy">{totals.missed}</div>
             </div>
             <div className="p-3 bg-rfl-peach/50 rounded">
               <div className="text-xs text-gray-600">Rest Days Used</div>
-              <div className="text-lg font-bold text-rfl-navy">{teamRestDays}</div>
+              <div className="text-lg font-bold text-rfl-navy">{totals.rest}</div>
             </div>
           </div>
         </CardContent>
@@ -510,36 +175,7 @@ export default function TeamPage() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-xl text-rfl-navy">Members</CardTitle>
-              <CardDescription>Sorted by points & RR</CardDescription>
-            </div>
-            <div className="relative dropdown-container">
-              <button
-                onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-rfl-coral focus:border-transparent"
-              >
-                <span>{dropdownOptions.find(opt => opt.value === selectedPeriod)?.label || "Season Total"}</span>
-                <ChevronDown className="w-4 h-4" />
-              </button>
-              {dropdownOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-300 rounded-md shadow-lg z-10">
-                  <div className="py-1">
-                    {dropdownOptions.map((option) => (
-                      <button
-                        key={option.value}
-                        onClick={() => {
-                          setSelectedPeriod(option.value);
-                          setDropdownOpen(false);
-                        }}
-                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-100 ${
-                          selectedPeriod === option.value ? 'bg-rfl-coral/10 text-rfl-coral' : 'text-gray-700'
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+              <CardDescription>Season Total • Sorted by points & RR</CardDescription>
             </div>
           </div>
         </CardHeader>
@@ -550,23 +186,23 @@ export default function TeamPage() {
                 <div className="flex sm:flex-row flex-col sm:items-center sm:justify-between gap-2">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-rfl-navy text-white flex items-center justify-center font-semibold">{idx+1}</div>
-                    <div className="font-medium text-rfl-navy">{m.name}</div>
+                    <div className="font-medium text-rfl-navy">{m.full_name.split(' ')[0]}</div>
                   </div>
                   <div className="grid grid-cols-4 sm:gap-6 gap-3 text-xs sm:text-sm w-full sm:w-auto">
                     <div className="text-center whitespace-nowrap">
-                      <div className="font-semibold text-rfl-coral">{m.approved_points ?? 0}</div>
+                      <div className="font-semibold text-rfl-coral">{m.total_points}</div>
                       <div className="text-gray-600">Points</div>
                     </div>
                     <div className="text-center whitespace-nowrap">
-                      <div className="font-semibold text-rfl-coral">{m.rest_used ?? 0}</div>
+                      <div className="font-semibold text-rfl-coral">{m.total_rest_days}</div>
                       <div className="text-gray-600">Rest</div>
                     </div>
                     <div className="text-center whitespace-nowrap">
-                      <div className="font-semibold text-rfl-navy">{m.missed_days ?? 0}</div>
+                      <div className="font-semibold text-rfl-navy">{m.total_missed_days}</div>
                       <div className="text-gray-600">Missed</div>
                     </div>
                     <div className="text-center whitespace-nowrap">
-                      <div className="font-semibold text-rfl-navy">{typeof m.avg_rr === 'number' ? m.avg_rr : '-'}</div>
+                      <div className="font-semibold text-rfl-navy">{m.avg_rr}</div>
                       <div className="text-gray-600">RR</div>
                     </div>
                   </div>
@@ -578,7 +214,7 @@ export default function TeamPage() {
         </CardContent>
       </Card>
 
-      {/* Leader approvals */}
+      {/* Leader approvals - still dynamic */}
       {session?.user?.role === 'leader' && (
         <>
           <Card className="bg-white shadow-md mt-6">
@@ -615,7 +251,7 @@ export default function TeamPage() {
                           if (!confirmed) return;
                           await getSupabase().from('entries').update({ status: 'rejected' }).eq('id', e.id);
                           setPending(p=>p.filter(x=>x.id!==e.id));
-                          if (teamId) { await loadMembersSummary(teamId); await loadPending(teamId, page); }
+                          if (teamId) { await loadPending(teamId, page); }
                         }}>Don't Accept</button>
                       </div>
                     </div>
@@ -627,7 +263,7 @@ export default function TeamPage() {
                         if (!confirmed) return;
                         await getSupabase().from('entries').update({ status: 'rejected' }).eq('id', e.id);
                         setPending(p=>p.filter(x=>x.id!==e.id));
-                        if (teamId) { await loadMembersSummary(teamId); await loadPending(teamId, page); }
+                        if (teamId) { await loadPending(teamId, page); }
                       }}>Don't Accept</button>
                     </div>
                   </div>

@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { getSupabase, calculateRR } from "@/lib/supabase";
 import TeamProgressChart from "./TeamProgressChart";
+import { getMemberByUserId, getTeamSummary, type StaticMemberData, type StaticTeamSummary } from "@/lib/static-team-data";
 
 type ActivityRow = {
   date: string;
@@ -194,6 +195,9 @@ export default function DashboardPage() {
   const [myRestUsed, setMyRestUsed] = useState<number>(0);
   const [myRestAllowance, setMyRestAllowance] = useState<number>(18);
   const [showAudioPopup, setShowAudioPopup] = useState(false);
+  // Static data for emergency mode
+  const [staticMember, setStaticMember] = useState<StaticMemberData | null>(null);
+  const [staticTeam, setStaticTeam] = useState<StaticTeamSummary | null>(null);
   const [viewWeekStart, setViewWeekStart] = useState<Date>(() => {
     // Initialize to current week (the week containing today)
     const today = new Date();
@@ -406,156 +410,38 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, viewWeekStart]);
 
-  // Load individual overall stats (season-to-date)
+  // Load individual overall stats from static data (emergency mode)
   useEffect(() => {
-    (async () => {
-      if (!userId) return;
-      const seasonStart = seasonFixedStart();
-      const today = new Date();
-      const yesterdayCutoff = new Date(today.getTime() - 24 * 3600 * 1000);
-      const seasonStartStr = SEASON_START_LOCAL_STR;
-      const todayLocalStr = formatLocalYYYYMMDD(today);
-
-      // Fetch all my approved entries for the season (for points/RR calculation)
-      const { data: myEntries } = await getSupabase()
-        .from('entries')
-        .select('type, rr_value, date')
-        .eq('user_id', userId)
-        .eq('status', 'approved')
-        .gte('date', seasonStartStr)
-        .lte('date', todayLocalStr);
-
-      const entries = (myEntries || []) as Array<{ type: string; rr_value: number | null; date: string }>;
-
-      // Calculate my stats
-      const points = entries.length; // every approved entry counts 1
-      const rrVals = entries.map(e => (typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0))).filter(v => v > 0);
-      const avgRR = rrVals.length ? Math.round((rrVals.reduce((a,b)=>a+b,0)/rrVals.length)*100)/100 : null;
-      const restUsed = entries.filter(e => String(e.type) === 'rest').length;
-
-      // Fetch ALL my entries (any status) for missed days calculation
-      // A day is only "missed" if there's NO entry at all (not even rejected/pending)
-      const { data: allMyEntries } = await getSupabase()
-        .from('entries')
-        .select('date')
-        .eq('user_id', userId)
-        .gte('date', seasonStartStr)
-        .lte('date', todayLocalStr);
-
-      const allEntriesDates = new Set((allMyEntries || []).map(e => String(e.date)));
+    if (!userId) return;
+    
+    // Load static member data
+    const member = getMemberByUserId(userId);
+    if (member) {
+      setStaticMember(member);
+      setMyPoints(member.total_points);
+      setMyAvgRR(member.avg_rr);
+      setMyMissedDays(member.total_missed_days);
+      setMyRestUsed(member.total_rest_days);
       
-      // Calculate missed days (days from season start through yesterday with no entry at all)
-      let missed = 0;
-      let cur = new Date(seasonStart);
-      while (cur.getTime() <= yesterdayCutoff.getTime()) {
-        const ds = formatLocalYYYYMMDD(new Date(cur));
-        if (!allEntriesDates.has(ds)) missed += 1;
-        cur = new Date(cur.getTime() + 24 * 3600 * 1000);
+      // Also load the team data for this member
+      const team = getTeamSummary(member.team_id);
+      if (team) {
+        setStaticTeam(team);
+        setTeamName(team.team_name);
       }
-
-      setMyPoints(points);
-      setMyAvgRR(avgRR);
-      setMyMissedDays(missed);
-      setMyRestUsed(restUsed);
-    })();
+    }
   }, [userId]);
 
-  // Compute Team overall summary (approved entries only) for season-to-date
+  // Compute Team overall summary from static data (emergency mode)
   useEffect(() => {
-    (async () => {
-      let effectiveTeamId = teamId;
-      if (!effectiveTeamId && userId) {
-        const { data: acct } = await getSupabase()
-          .from('accounts')
-          .select('team_id')
-          .eq('id', userId)
-          .maybeSingle();
-        effectiveTeamId = (acct as any)?.team_id || null;
-        if (effectiveTeamId) setTeamId(effectiveTeamId);
-      }
-      if (!effectiveTeamId) return;
-
-      const seasonStart = seasonFixedStart();
-      const today = new Date();
-      const yesterdayCutoff2 = new Date(today.getTime() - 24 * 3600 * 1000);
-      const seasonStartStr = SEASON_START_LOCAL_STR;
-      const todayLocalStr = formatLocalYYYYMMDD(today);
-      
-      // Fetch team members
-      const { data: teamUsers } = await getSupabase()
-        .from('accounts')
-        .select('id')
-        .eq('team_id', effectiveTeamId);
-      const memberIds = ((teamUsers || []) as Array<{ id: string }>).map((u)=> String(u.id));
-      
-      // Fetch all approved entries for the team for the season (for points/RR calculation)
-      const { data } = await getSupabase()
-        .from('entries')
-        .select('id, user_id, date, type, rr_value')
-        .eq('team_id', effectiveTeamId)
-        .eq('status', 'approved')
-        .gte('date', seasonStartStr)
-        .lte('date', todayLocalStr);
-      const entries = (data || []) as Array<{ id: string; user_id: string; date: string; type: string | null; rr_value: number | null }>;
-      const teamPts = entries.length; // every approved entry counts 1
-      const rrVals = entries.map(e => (typeof e.rr_value === 'number' ? e.rr_value : Number(e.rr_value || 0))).filter(v => v > 0);
-      const teamRR = rrVals.length ? Math.round((rrVals.reduce((a,b)=>a+b,0)/rrVals.length)*100)/100 : null;
-      // Team rest days (approved)
-      const restUsed = entries.filter(e => String(e.type) === 'rest').length;
-      
-      // Fetch ALL team entries (any status) for missed days calculation
-      // A day is only "missed" if there's NO entry at all (not even rejected/pending)
-      const { data: allTeamEntries } = await getSupabase()
-        .from('entries')
-        .select('user_id, date')
-        .eq('team_id', effectiveTeamId)
-        .gte('date', seasonStartStr)
-        .lte('date', todayLocalStr);
-      
-      // FIXED: Team missed days calculation - only count when rest days are exhausted per member
-      const memberSet = new Set(memberIds);
-      const byDateUser = new Set((allTeamEntries || []).map(e => `${String(e.date)}|${String(e.user_id)}`));
-      
-      // Count rest days per user from approved entries
-      const restDaysByUser = new Map<string, number>();
-      entries.forEach((e) => {
-        if (String(e.type) === 'rest') {
-          const uid = String(e.user_id);
-          restDaysByUser.set(uid, (restDaysByUser.get(uid) || 0) + 1);
-        }
-      });
-      
-      // Count days without entry per user
-      const daysWithoutEntryByUser = new Map<string, number>();
-      {
-        let day = new Date(seasonStart);
-        while (day.getTime() <= yesterdayCutoff2.getTime()) {
-          const ds = formatLocalYYYYMMDD(new Date(day));
-          memberSet.forEach((uid) => { 
-            if (!byDateUser.has(`${ds}|${uid}`)) {
-              daysWithoutEntryByUser.set(uid, (daysWithoutEntryByUser.get(uid) || 0) + 1);
-            }
-          });
-          day = new Date(day.getTime() + 24 * 3600 * 1000);
-        }
-      }
-      
-      // Calculate actual missed days: only count when rest days are exhausted
-      let totalMissed = 0;
-      memberSet.forEach((uid) => {
-        const daysWithoutEntry = daysWithoutEntryByUser.get(uid) || 0;
-        const userRestUsed = restDaysByUser.get(uid) || 0;
-        const restDaysRemaining = Math.max(0, 18 - userRestUsed);
-        totalMissed += Math.max(0, daysWithoutEntry - restDaysRemaining);
-      });
-      
-      setTeamPoints(teamPts);
-      setTeamAvgRR(teamRR);
-      setTeamRestWeek(restUsed);
-      setTeamMissedWeek(totalMissed);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamId, userId]);
+    if (staticTeam) {
+      // Use scaled team points (rounded up) like the team page
+      setTeamPoints(Math.ceil(staticTeam.scaled_team_points));
+      setTeamAvgRR(staticTeam.team_avg_rr);
+      setTeamRestWeek(staticTeam.total_rest_days);
+      setTeamMissedWeek(staticTeam.total_missed_days);
+    }
+  }, [staticTeam]);
 
   // Removed league-wide standings from dashboard (moved to leaderboards page)
 

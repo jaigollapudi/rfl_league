@@ -2,10 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import React from 'react'
-import { Menu, Plus, Pencil, Trash2, Save, X } from 'lucide-react'
+import { Menu, Plus, Pencil, Trash2, Save, X, FileText } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { getSupabase } from '@/lib/supabase'
+import dynamic from 'next/dynamic'
+
+// Dynamically import GenerateReportView to avoid SSR issues with @react-pdf/renderer
+const GenerateReportView = dynamic(
+  () => import('@/components/generate-report-view'),
+  { ssr: false, loading: () => <div className="p-8 text-center text-gray-500">Loading report generator...</div> }
+)
 
 type TeamRow = { team_id: string; team_name: string; points: number; avg_rr: number | null; rest_days?: number | null }
 type IndividualRow = { user_id: string; first_name?: string; last_name?: string; username?: string | null; team_id?: string | null; team_name?: string | null; points: number; avg_rr: number | null; rest_days?: number | null; missed_days?: number | null }
@@ -82,7 +89,7 @@ export default function GovernorPage() {
   const [teamMembers, setTeamMembers] = useState<Account[]>([]);
   const [analyticsEvents, setAnalyticsEvents] = useState<Array<{ received_at: string } & Record<string, any>>>([]);
   // Tab state for section navigation
-  type GovTab = 'teamLeaderboard' | 'activitySnapshot' | 'leagueSummary' | 'teamSummary' | 'individualLeaderboard';
+  type GovTab = 'teamLeaderboard' | 'activitySnapshot' | 'leagueSummary' | 'teamSummary' | 'individualLeaderboard' | 'generate_report';
   const [tab, setTab] = useState<GovTab>('teamLeaderboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   // Sync tab from hash so Navbar mobile links can target sections
@@ -90,7 +97,7 @@ export default function GovernorPage() {
     const applyFromHash = () => {
       if (typeof window === 'undefined') return;
       const h = window.location.hash.replace('#','');
-      const allowed = new Set(['teamLeaderboard','activitySnapshot','leagueSummary','teamSummary','individualLeaderboard']);
+      const allowed = new Set(['teamLeaderboard','activitySnapshot','leagueSummary','teamSummary','individualLeaderboard','generate_report']);
       if (allowed.has(h)) setTab(h as GovTab);
     };
     applyFromHash();
@@ -789,6 +796,7 @@ export default function GovernorPage() {
           <button className={`px-3 py-1.5 rounded text-sm ${tab==='leagueSummary'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>{ setTab('leagueSummary'); if (typeof window!=='undefined') window.location.hash='leagueSummary'; }}>League Summary</button>
           <button className={`px-3 py-1.5 rounded text-sm ${tab==='teamSummary'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>{ setTab('teamSummary'); if (typeof window!=='undefined') window.location.hash='teamSummary'; }}>Team Summary</button>
           <button className={`px-3 py-1.5 rounded text-sm ${tab==='individualLeaderboard'?'bg-rfl-navy text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>{ setTab('individualLeaderboard'); if (typeof window!=='undefined') window.location.hash='individualLeaderboard'; }}>Individual Leaderboard</button>
+          <button className={`px-3 py-1.5 rounded text-sm flex items-center gap-1 ${tab==='generate_report'?'bg-rfl-coral text-white':'bg-gray-100 text-gray-800'}`} onClick={()=>{ setTab('generate_report'); if (typeof window!=='undefined') window.location.hash='generate_report'; }}><FileText className="w-4 h-4" />Generate Report</button>
         </div>
         {/* Mobile hamburger for tab navigation */}
         <div className="md:hidden relative">
@@ -803,8 +811,9 @@ export default function GovernorPage() {
                 {k:'leagueSummary', label:'League Summary'},
                 {k:'teamSummary', label:'Team Summary'},
                 {k:'individualLeaderboard', label:'Individual Leaderboard'},
+                {k:'generate_report', label:'Generate Report'},
               ].map((it)=> (
-                <button key={String(it.k)} className={`block w-full text-left px-3 py-2 text-sm ${tab===it.k as GovTab ? 'bg-gray-100 text-rfl-navy':'text-gray-800'}`} onClick={()=>{ setTab(it.k as GovTab); setMobileMenuOpen(false); }}>
+                <button key={String(it.k)} className={`block w-full text-left px-3 py-2 text-sm ${tab===it.k as GovTab ? 'bg-gray-100 text-rfl-navy':'text-gray-800'}`} onClick={()=>{ setTab(it.k as GovTab); setMobileMenuOpen(false); if (typeof window!=='undefined') window.location.hash=it.k; }}>
                   {it.label}
                 </button>
               ))}
@@ -1281,6 +1290,11 @@ export default function GovernorPage() {
           </div>
         </div>
       </div>
+      )}
+
+      {/* Generate Report View */}
+      {tab === 'generate_report' && (
+        <GenerateReportView />
       )}
     </div>
   )
